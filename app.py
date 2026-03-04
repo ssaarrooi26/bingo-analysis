@@ -2,23 +2,28 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# 1. 設定你的 Google 試算表 CSV 導出連結
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1n7JFERmqVCUHwpueBoCH9CKMHqjIaaEKqkDSkjjBmZM/export?format=csv"
+
 # 設定網頁標題與圖標
 st.set_page_config(page_title="Bingo 分析大師", layout="wide")
 
 st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 
-# 1. 讀取資料
-file_path = '數據分析_2026.csv'
-
-@st.cache_data # 讓資料讀取更快
-def load_data():
-    try:
-        df = pd.read_csv(file_path, encoding='cp950')
-    except:
-        df = pd.read_csv(file_path, encoding='utf-8')
+# 1. 讀取資料 (加上快取機制)
+# ttl=60 代表每 60 秒會自動檢查一次 Google 試算表有沒有新資料
+@st.cache_data(ttl=60)
+def load_data(url):
+    # Google Sheets 導出的 CSV 統一都是 utf-8，不需要擔心編碼問題
+    df = pd.read_csv(url)
     return df
 
-df = load_data()
+try:
+    df = load_data(SHEET_URL)
+    st.success("✅ 數據已從雲端同步")
+except Exception as e:
+    st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
+    st.stop()
 
 # 2. 側邊欄：設定參數
 st.sidebar.header("設定選項")
@@ -49,3 +54,4 @@ with tab2:
 
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
