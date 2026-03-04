@@ -27,7 +27,7 @@ target_numbers = [str(i) for i in range(1, 81)]
 existing_cols = [col for col in target_numbers if col in df.columns]
 
 # 3. 功能分頁
-tab1, tab2 = st.tabs(["🔥 頻率分佈圖", "心 分段趨勢表"])
+tab1, tab2 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表"])
 
 with tab1:
     st.header("1-80 號碼總出現頻率")
@@ -46,5 +46,6 @@ with tab2:
     
     # 加入色階美化 (熱力圖效果)
     st.dataframe(interval_stats.style.background_gradient(cmap='YlOrRd'))
+
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
