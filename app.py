@@ -111,9 +111,69 @@ with tab3:
     mix_picks = random.sample(hot_numbers, 3) + random.sample(cold_numbers, 2)
     st.success(f"本日推薦組合： {', '.join(mix_picks)}")
 
+    # 取得最新兩期數據
+    if len(df) >= 2:
+        last_row = df.iloc[0]  # 最新一期
+        prev_row = df.iloc[1]  # 前一期
+        
+        # 找出有開出的號碼 (欄位值不為空)
+        current_nums = set([col for col in existing_cols if pd.notnull(last_row[col])])
+        prev_nums = set([col for col in existing_cols if pd.notnull(prev_row[col])])
+        
+        # 1. 連莊號碼分析
+        repeat_nums = current_nums.intersection(prev_nums)
+        
+        st.subheader("1. 🔄 連莊追蹤 (Repeated)")
+        col_r1, col_r2 = st.columns([1, 2])
+        col_r1.metric("本期連莊數", f"{len(repeat_nums)} 碼")
+        col_r2.write(f"最新連莊號碼： {', '.join(sorted(list(repeat_nums))) if repeat_nums else '無'}")
+        
+        st.divider()
+
+        # 2. 黃金區間分析 (每 10 號一區)
+        st.subheader("2. 🏆 黃金區間 (Sections)")
+        section_data = {}
+        for i in range(0, 80, 10):
+            start, end = i + 1, i + 10
+            label = f"{start}-{end}"
+            # 統計這 10 個號碼在最新一期開出幾顆
+            section_cols = [str(n) for n in range(start, end + 1) if str(n) in existing_cols]
+            count = sum(pd.notnull(last_row[section_cols]))
+            section_data[label] = count
+            
+        st.bar_chart(pd.Series(section_data), color="#f4a261")
+        max_sec = max(section_data, key=section_data.get)
+        st.caption(f"💡 目前最旺區間：{max_sec} 區 (開出 {section_data[max_sec]} 碼)")
+
+        st.divider()
+
+        # 3. 尾數熱度分析 (0-9 尾)
+        st.subheader("3. 🔢 尾數分析 (Last Digit)")
+        tail_data = {str(i): 0 for i in range(10)}
+        for num in current_nums:
+            tail = str(int(num) % 10)
+            tail_data[tail] += 1
+            
+        # 轉換成 DataFrame 顯示更精美
+        tail_df = pd.DataFrame(list(tail_data.items()), columns=['尾數', '開出個數'])
+        st.dataframe(
+            tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
+        )
+        
+        # 綜合預測邏輯
+        st.divider()
+        st.subheader("🎲 綜合推薦組合")
+        # 這裡結合最旺區間 + 熱門尾數
+        top_tail = max(tail_data, key=tail_data.get)
+        st.success(f"建議關注：{max_sec} 區間的號碼，並優先考慮「{top_tail}」尾的組合。")
+
+    else:
+        st.info("數據量不足，請至少輸入兩期資料以進行進階分析。")
+
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
