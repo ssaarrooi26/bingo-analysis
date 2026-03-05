@@ -34,7 +34,7 @@ target_numbers = [str(i) for i in range(1, 81)]
 existing_cols = [col for col in target_numbers if col in df.columns]
 
 # 3. 功能分頁
-tab1, tab2 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議"])
+tab1, tab2, tab3 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議"])
 
 with tab1:
     st.header("1-80 號碼總出現頻率")
@@ -114,6 +114,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
