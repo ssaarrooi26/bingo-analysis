@@ -55,7 +55,7 @@ with tab2:
     # 這樣「全表」出現 3 次的格子顏色都會一模一樣
 
     my_red_white_green = mcolors.LinearSegmentedColormap.from_list(
-        "custom_rwg", ["#FF3333", "#FFFFFF", "#228B22"]
+        "custom_rwg", ["#ff4b4b", "#FFFFFF", "#008000"]
     )
 
     styled_df = interval_stats.style.background_gradient(
@@ -70,6 +70,7 @@ with tab2:
 
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
