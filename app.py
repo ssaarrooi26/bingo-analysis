@@ -50,16 +50,23 @@ with tab2:
     interval_stats = df.groupby('Group')[existing_cols].apply(lambda x: x.notnull().sum())
     interval_stats.index = [f"第 {i*group_size-(group_size-1)}~{i*group_size} 筆" for i in interval_stats.index]
     
-    # 2. 設定色階 (這裡使用 '' 黃到紅)
+    
+    # 2. 獲取數據的最大值，用來計算顏色比例
+    max_val = interval_stats.max().max()
+    if max_val <= 1: max_val = 2 # 防止除以零
+
+    # 3. 自定義非線性色階
+    # 我們設定：0 是紅色，1/max_val 的位置是白色，1 是綠色
+    # 這樣 0->1 是紅變白，1->最大值 是白變綠
+    nodes = [0.0, 1.0/max_val, 1.0]
+    colors = ["#FF3333", "#FFFFFF", "#008000"] # 紅、白、深綠
+    special_cmap = mcolors.LinearSegmentedColormap.from_list("special_rng", list(zip(nodes, colors)))
+    
+    # 4. 設定色階 
     # axis=None 代表對整個表格進行全域比較，而不僅是單行或單列比較
     # 這樣「全表」出現 3 次的格子顏色都會一模一樣
-
-    my_red_white_green = mcolors.LinearSegmentedColormap.from_list(
-        "custom_rwg", ["#ff4b4b", "#FFFFFF", "#008000"]
-    )
-
     styled_df = interval_stats.style.background_gradient(
-        cmap=my_red_white_green, 
+        cmap=special_cmap, 
         axis=None,    # 關鍵：全域比較，相同數值必同色
         low=0,        # 設定顏色範圍的最小值
         high=0.5      # 稍微調高上限，可以讓顏色對比更明顯（可視情況調整）
@@ -70,6 +77,7 @@ with tab2:
 
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
