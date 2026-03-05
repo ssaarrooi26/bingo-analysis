@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import random
 
 # 1. 設定你的 Google 試算表 CSV 導出連結
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1n7JFERmqVCUHwpueBoCH9CKMHqjIaaEKqkDSkjjBmZM/export?format=csv"
@@ -75,8 +76,45 @@ with tab2:
     # 3. 顯示表格
     st.dataframe(styled_df, height=600)
 
+with tab3:
+    st.header("🔮 智能選號建議")
+    
+    # 1. 準備基礎數據：計算每個號碼的總出現次數與最後出現期數
+    latest_counts = df[existing_cols].notnull().sum()
+    
+    # 2. 演算法 A：熱門號碼 (近期最常出現的前 10 名)
+    hot_numbers = latest_counts.nlargest(10).index.tolist()
+    
+    # 3. 演算法 B：潛力冷號 (目前沒開，但總頻率不低的號碼)
+    # 這裡我們隨機從出現次數較少的後 20 名中選 5 個，避免每次都一樣
+    cold_numbers = latest_counts.nsmallest(20).index.tolist()
+    suggested_cold = random.sample(cold_numbers, 5)
+
+    # 顯示建議介面
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🔥 熱門號碼建議")
+        st.write("根據近期大數據，這幾號手氣最旺：")
+        st.info(", ".join(hot_numbers))
+        
+    with col2:
+        st.subheader("❄️ 冷門回補建議")
+        st.write("這幾號沉寂已久，近期可能回補：")
+        st.warning(", ".join(suggested_cold))
+
+    st.divider()
+
+    # 4. 終極電腦選號 (混合邏輯)
+    st.subheader("🎲 綜合推薦組合 (5 碼)")
+    # 從熱門選 3 碼 + 冷門選 2 碼
+    mix_picks = random.sample(hot_numbers, 3) + random.sample(cold_numbers, 2)
+    st.success(f"本日推薦組合： {', '.join(mix_picks)}")
+
+    st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
