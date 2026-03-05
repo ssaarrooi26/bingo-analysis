@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 # 1. 設定你的 Google 試算表 CSV 導出連結
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1n7JFERmqVCUHwpueBoCH9CKMHqjIaaEKqkDSkjjBmZM/export?format=csv"
@@ -52,8 +53,9 @@ with tab2:
     # 2. 設定色階 (這裡使用 'YlOrRd' 黃到紅)
     # axis=None 代表對整個表格進行全域比較，而不僅是單行或單列比較
     # 這樣「全表」出現 3 次的格子顏色都會一模一樣
+    custom_cmap = mcolors.LinearSegmentedColormap.from_list("red_white_green", ["#ff4b4b", "#ffffff", "#008000"])
     styled_df = interval_stats.style.background_gradient(
-        cmap='RdYlGn', 
+        cmap='custom_cmap', 
         axis=None,    # 關鍵：全域比較，相同數值必同色
         low=0,        # 設定顏色範圍的最小值
         high=0.5      # 稍微調高上限，可以讓顏色對比更明顯（可視情況調整）
@@ -64,6 +66,7 @@ with tab2:
 
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
