@@ -53,7 +53,8 @@ with tab2:
     # 2. 設定色階 (這裡使用 'YlOrRd' 黃到紅)
     # axis=None 代表對整個表格進行全域比較，而不僅是單行或單列比較
     # 這樣「全表」出現 3 次的格子顏色都會一模一樣
-    custom_cmap = mcolors.LinearSegmentedColormap.from_list("red_white_green", ["#FF0000", "#ffffff", "#228B22"])
+    colors = ["#FF0000", "#ffffff", "#228B22"]
+    custom_cmap = mcolors.LinearSegmentedColormap.from_list("red_white_green", colors)
     
     styled_df = interval_stats.style.background_gradient(
         cmap='custom_cmap', 
@@ -67,6 +68,7 @@ with tab2:
 
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
