@@ -3,6 +3,53 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import random
+import requests
+from bs4 import BeautifulSoup
+
+# ---  爬蟲測試函數 ---
+def test_scraping():
+    url = "https://lotto.auzo.tw/RK.php"
+    try:
+        # 模擬瀏覽器行為，避免被網站阻擋
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.encoding = 'utf-8'
+        
+        if response.status_code != 200:
+            return None, f"連線失敗，狀態碼：{response.status_code}"
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 定位開獎表格：該網站的開獎通常在第一個 table 內
+        table = soup.find('table')
+        if not table:
+            return None, "找不到數據表格"
+
+        rows = table.find_all('tr')
+        # 抓取最新一列 (通常是 index 1，因為 index 0 是表頭)
+        target_row = rows[1]
+        cols = target_row.find_all('td')
+        
+        # 提取期數
+        draw_id = cols[0].get_text(strip=True)
+        
+        # 提取號碼 (該網站通常將 20 個號碼放在後續的 td 或 span 內)
+        # 我們過濾出所有 1-80 的數字
+        raw_numbers = [c.get_text(strip=True) for c in cols]
+        numbers = []
+        for val in raw_numbers:
+            # 去除可能的前導零並確認是數字
+            clean_val = val.lstrip('0')
+            if clean_val.isdigit() and 1 <= int(clean_val) <= 80:
+                numbers.append(val) # 保留原始格式(如 05)
+
+        # 只要抓到 20 個號碼就代表成功
+        return draw_id, numbers[:20]
+
+    except Exception as e:
+        return None, str(e)
+
+
 
 # 1. 設定你的 Google 試算表 CSV 導出連結
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1n7JFERmqVCUHwpueBoCH9CKMHqjIaaEKqkDSkjjBmZM/export?format=csv"
@@ -36,6 +83,18 @@ except Exception as e:
     st.stop()
 
 # 2. 側邊欄：設定參數
+st.sidebar.header("⚙️ 自動化工具測試")
+if st.sidebar.button("🔍 抓取官網最新號碼"):
+    with st.sidebar:
+        draw_id, result = test_scraping()
+        if draw_id and len(result) == 20:
+            st.success(f"期數：{draw_id}")
+            st.code(", ".join(result))
+        else:
+            st.error(f"抓取異常：{result}")
+
+st.sidebar.divider() # 加入分隔線，區分自動化與原本的設定
+
 st.sidebar.header("設定選項")
 group_size = st.sidebar.slider("區間期數 (每幾期一組)", 1, 20, 5)
 target_numbers = [str(i) for i in range(1, 81)]
@@ -181,6 +240,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
