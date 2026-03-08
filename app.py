@@ -429,6 +429,11 @@ with tab3:
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
             cols[i].metric(label=f"建議號碼 {i+1}", value=num)
+
+        # 這裡可以順便放我們之前的循環提示
+        remainder = latest_draw_id % 5
+        if remainder in [0, 4]:
+            st.caption("🛡️ 提示：目前處於循環末端，系統已自動過濾過熱號碼。")
         
         # 綜合預測邏輯
         st.divider()
@@ -443,6 +448,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
