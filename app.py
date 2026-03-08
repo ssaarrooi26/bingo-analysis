@@ -368,23 +368,51 @@ with tab3:
         )
 
         def smart_pick_3(df, omissions, interval_stats):
-            # 1. 找出最熱門區間 (從分段趨勢表中找最後一筆)
-            top_zone = interval_stats.iloc[-1].idxmax() # 找出出現次數最多的欄位
+            import random
             
-            # 2. 獲取候選清單
-            # 號碼 A: 熱門區間中遺漏值最低的 (追熱)
-            zone_range = range(1, 81) # 這裡要根據你的區間劃分邏輯來定
-            candidate_a = min(omissions, key=omissions.get) 
+            # --- 準備工作 ---
+            # 找出最熱門的區間 (假設你的 interval_stats 欄位是 '1-10', '11-20' 等)
+            top_zone_name = interval_stats.iloc[-1].idxmax() 
             
-            # 3. 號碼 B: 遺漏值最高的極端碼 (守冷)
-            candidate_b = max(omissions, key=omissions.get)
+            # 根據區間名稱定義號碼範圍 (這部分需對應你的區間劃分)
+            # 這裡示範簡易邏輯：假設區間是以 10 為單位
+            zone_map = {
+                "1-10": range(1, 11), "11-20": range(11, 21), "21-30": range(21, 31),
+                "31-40": range(31, 41), "41-50": range(41, 51), "51-60": range(51, 61),
+                "61-70": range(61, 71), "71-80": range(71, 81)
+            }
+            target_range = zone_map.get(top_zone_name, range(1, 81))
             
-            # 4. 號碼 C: 符合 5 期循環邏輯的碼
-            # 找遺漏期數剛好是 4 或 5 的號碼
-            cycle_nums = [n for n, o in omissions.items() if o == 5]
-            candidate_c = cycle_nums[0] if cycle_nums else "10" # 若無則給個保底號
+            # 將遺漏值字典轉為更易篩選的清單 (格式: [(球號, 遺漏期數), ...])
+            omission_list = [(n, int(o)) for n, o in omissions.items()]
+        
+            # --- 第二階段 & 第三階段策略實作 ---
             
-            return [candidate_a, candidate_b, candidate_c]
+            # 1. 號碼 A (強勢連動碼)：選自最熱區間，且遺漏為 0 或 1
+            # 邏輯：從熱區號碼中，找剛開出或連莊的
+            candidates_a = [n for n, o in omission_list if int(n) in target_range and o <= 1]
+            candidate_a = random.choice(candidates_a) if candidates_a else min(omissions, key=omissions.get)
+        
+            # 2. 號碼 B (區間反彈碼)：極端冷區，且遺漏期數是 5 的倍數 或 >= 15
+            # 邏輯：找那種久未開出 (>=15) 或是剛好卡在循環點 (5, 10, 15...) 的
+            candidates_b = [n for n, o in omission_list if o >= 15 or (o > 0 and o % 5 == 0)]
+            # 從中挑選遺漏值最大的
+            candidate_b = max(candidates_b, key=lambda x: omissions[x]) if candidates_b else max(omissions, key=omissions.get)
+        
+            # 3. 號碼 C (規律溫波碼)：黃金遺漏 3~5 期
+            # 邏輯：找那種「熱過後冷卻再回溫」的穩健號
+            candidates_c = [n for n, o in omission_list if 3 <= o <= 5]
+            # 如果有多個，可以從中隨選一個，或選歷史頻率高的 (此處先用隨機)
+            candidate_c = random.choice(candidates_c) if candidates_c else "10"
+        
+            # 確保三個號碼不重複 (如果重複則用保底)
+            final_picks = list(set([candidate_a, candidate_b, candidate_c]))
+            while len(final_picks) < 3:
+                random_backup = str(random.randint(1, 80)).zfill(2)
+                if random_backup not in final_picks:
+                    final_picks.append(random_backup)
+        
+            return final_picks[:3]
 
         # UI 顯示
         recommendations = smart_pick_3(df, omissions, interval_stats)
@@ -406,6 +434,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
