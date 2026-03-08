@@ -425,13 +425,20 @@ with tab3:
 
         # UI 顯示
         recommendations = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
-        # 驗證邏輯顯示
-        if latest_draw_id % 5 in [0, 4]:
-            st.caption("🛡️ 已啟動「循環末端避熱」機制，過濾重複出現號碼。")
+        
         st.subheader("🎯 系統精選：今日大數據三碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
             cols[i].metric(label=f"建議號碼 {i+1}", value=num)
+
+        # --- 關鍵修正區塊 ---
+        # 這裡用 st.write 先測試，確保邏輯有跑進來
+        # remainder == 0 是指 5 的倍數 (例如期數 115)
+        # remainder == 4 是指 5 的倍數減 1 (例如期數 114)
+        if remainder == 0 or remainder == 4:
+            st.caption(f"🛡️ 目前期數 {latest_draw_id} (餘數 {remainder})：已啟動「循環末端避熱」機制。")
+        else:
+            st.caption(f"ℹ️ 目前期數 {latest_draw_id} (餘數 {remainder})：循環進行中，維持常規分析。")
 
         # 綜合預測邏輯
         st.divider()
@@ -446,6 +453,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
