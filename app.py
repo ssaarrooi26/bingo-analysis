@@ -269,12 +269,7 @@ with tab3:
 
     st.divider()
 
-    # 4. 終極電腦選號 (混合邏輯)
-    st.subheader("🎲 綜合推薦組合 (5 碼)")
-    # 從熱門選 3 碼 + 冷門選 2 碼
-    mix_picks = random.sample(hot_numbers, 3) + random.sample(cold_numbers, 2)
-    st.success(f"本日推薦組合： {', '.join(mix_picks)}")
-
+    # 遺漏期數統計
     def calculate_omission(df, target_numbers):
         omission_dict = {}
         
@@ -411,6 +406,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
