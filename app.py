@@ -221,7 +221,28 @@ with tab2:
 
 with tab3:
     st.header("🔮 智能選號建議")
-    
+
+    # 取得當前最新一期期數
+    if not df.empty:
+        # 假設你的期數欄位名稱為 '期數'
+        latest_draw_id = int(df['期數'].max())
+        
+        # 2. 顯示最新期數資訊
+        st.info(f"📅 當前最新期數：**{latest_draw_id}**")
+        
+        # 3. 計算五期循環邏輯
+        # 餘數為 0 代表剛好整除
+        remainder = latest_draw_id % 5
+        
+        if remainder == 0:
+            st.success("🎯 當前已達成 5 期循環！數據已完整，適合進行下波預測分析。")
+        else:
+            wait_count = 5 - remainder
+            st.warning(f"⏳ 目前處於循環中：第 **{remainder}** 期")
+            st.write(f"👉 距離下一個完整區間（5期）還需等待：**{wait_count}** 期")
+            
+        st.divider() # 分隔線
+
     # 1. 準備基礎數據：計算每個號碼的總出現次數與最後出現期數
     latest_counts = df[existing_cols].notnull().sum()
     
@@ -316,6 +337,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
