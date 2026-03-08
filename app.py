@@ -381,43 +381,39 @@ with tab3:
             # 統計本循環中各號碼出現次數
             # count() 會計算非空值數量
             appearance_counts = df_this_cycle.notnull().sum()
-        
-            # --- 2. 連莊斜率分析 (Momentum) ---
+            
+            # --- 2. 連莊斜率 (Candidate A 維持追熱) ---
             # 檢查上一期 (Index 0) 與 上上期 (Index 1) 是否同時出現
             last_draw = df.iloc[0]
             prev_draw = df.iloc[1]
-            
-            # 找出連莊 2 期以上的號碼 (斜率向上)
             streaking_nums = [n for n in last_draw.index if last_draw.notnull()[n] and prev_draw.notnull()[n]]
         
-            # --- 3. 執行篩選策略 ---
+            # --- 3. 執行篩選策略 (移除守冷，強化節奏) ---
             omission_list = [(n, int(o)) for n, o in omissions.items()]
             
-            # 號碼 A (強勢連動碼)：優先從「連莊號」中挑選
+            # 號碼 A (強勢碼)：追連莊或熱門
             if streaking_nums:
                 candidate_a = random.choice(streaking_nums)
             else:
-                # 若無連莊號，則抓遺漏 0-1 的熱門號
                 candidate_a = min(omissions, key=omissions.get)
         
-            # 號碼 B (區間反彈碼)：極端守冷 (維持原邏輯)
-            candidates_b = [n for n, o in omission_list if o >= 15 or (o > 0 and o % 5 == 0)]
-            candidate_b = max(candidates_b, key=lambda x: omissions[x]) if candidates_b else max(omissions, key=omissions.get)
+            # 號碼 B (標準節奏碼)：鎖定遺漏值為 5 (精準對位)
+            # 尋找剛好符合一個循環週期未出現的號碼
+            candidates_b = [n for n, o in omission_list if o == 5]
+            if is_end_of_cycle: # 避熱
+                candidates_b = [n for n in candidates_b if appearance_counts.get(n, 0) < 2]
+            candidate_b = random.choice(candidates_b) if candidates_b else "08" # 預設幸運號
         
-            # 號碼 C (規律溫波碼)：加入「循環避熱」邏輯
-            candidates_c = [n for n, o in omission_list if o == 5]
-            
-            # 【關鍵：循環檢測】如果快到循環末尾，過濾掉本循環出現過 2 次以上的號碼
-            if is_end_of_cycle:
+            # 號碼 C (擴展節奏碼)：鎖定遺漏值為 10 或 15 (長週期對位)
+            # 尋找符合 2 倍或 3 倍循環週期的規律號碼
+            candidates_c = [n for n, o in omission_list if o in [10, 15]]
+            if is_end_of_cycle: # 避熱【關鍵：循環檢測】如果快到循環末尾，過濾掉本循環出現過 2 次以上的號碼
                 candidates_c = [n for n in candidates_c if appearance_counts.get(n, 0) < 2]
-            
-            # 如果過濾完沒號碼，就從溫波號隨選
-            candidate_c = random.choice(candidates_c) if candidates_c else "10"
+            candidate_c = random.choice(candidates_c) if candidates_c else "16"
         
             # 確保不重複
             final_picks = list(set([candidate_a, candidate_b, candidate_c]))
             while len(final_picks) < 3:
-                # 保底機制
                 res = str(random.randint(1, 80)).zfill(2)
                 if res not in final_picks: final_picks.append(res)
         
@@ -453,6 +449,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
