@@ -5,8 +5,10 @@ import matplotlib.colors as mcolors
 import random
 import requests
 from bs4 import BeautifulSoup
+import gspread
+from google.oauth2.service_account import Credentials
 
-# ---  爬蟲測試函數 ---
+# 爬蟲測試函數
 def test_scraping():
     url = "https://lotto.auzo.tw/RK.php"
     try:
@@ -63,8 +65,33 @@ def test_scraping():
     except Exception as e:
         return None, f"程式發生錯誤: {str(e)}"
 
+# 新增寫入功能函數
+def update_to_gsheets(draw_id, numbers):
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        # 從 Streamlit Secrets 讀取 (請確保雲端後台已設定)
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        
+        # 請確保這裡的名稱與你的 Google Sheet 檔案名稱完全一致
+        sheet = client.open("數據分析_2026").sheet6
+        
+        # 檢查期數是否已存在
+        existing_ids = sheet.col_values(1)
+        if str(draw_id) in existing_ids:
+            return f"ℹ️ 期數 {draw_id} 已存在，無需重複寫入。"
+        
+        # 準備資料行：[期數, 號碼01, 號碼02...號碼20]
+        new_row = [draw_id] + numbers
+        sheet.insert_row(new_row, index=2) # 插入在標題列下方
+        return f"✅ 成功！期數 {draw_id} 已寫入雲端表單。"
+    except Exception as e:
+        return f"❌ 寫入失敗: {str(e)}"
 
-# 1. 設定你的 Google 試算表 CSV 導出連結
+# 設定你的 Google 試算表 CSV 導出連結
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1n7JFERmqVCUHwpueBoCH9CKMHqjIaaEKqkDSkjjBmZM/export?format=csv"
 
 # 設定網頁標題與圖標
@@ -72,14 +99,14 @@ st.set_page_config(page_title="Bingo 分析大師", layout="wide")
 
 st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 
-# 1. 讀取資料 (加上快取機制)
+# 讀取資料 (加上快取機制)
 # ttl=60 代表每 60 秒會自動檢查一次 Google 試算表有沒有新資料
 @st.cache_data(ttl=60)
 def load_data(url):
     # Google Sheets 導出的 CSV 統一都是 utf-8，不需要擔心編碼問題
     df = pd.read_csv(url)
 
-# 1. 確保「期數」這欄被視為數字（避免 100 排在 2 前面）
+#  確保「期數」這欄被視為數字（避免 100 排在 2 前面）
     if '期數' in df.columns:
         df['期數'] = pd.to_numeric(df['期數'], errors='coerce')
         
@@ -96,15 +123,27 @@ except Exception as e:
     st.stop()
 
 # 2. 側邊欄：設定參數
-st.sidebar.header("⚙️ 自動化工具測試")
-if st.sidebar.button("🔍 抓取官網最新號碼"):
+st.sidebar.header("🚀 數據同步工具")
+if st.sidebar.button("🔄 抓取並同步至雲端"):
     with st.sidebar:
-        draw_id, result = test_scraping()
-        if draw_id and len(result) == 20:
-            st.success(f"期數：{draw_id}")
-            st.code(", ".join(result))
-        else:
-            st.error(f"抓取異常：{result}")
+        with st.spinner("正在執行自動化流程..."):
+            # A. 先抓取
+            draw_id, result = test_scraping()
+            
+            if draw_id and len(result) == 20:
+                st.info(f"🔍 偵測到官網期數：{draw_id}")
+                
+                # B. 執行寫入
+                write_msg = update_to_gsheets(draw_id, result)
+                st.write(write_msg)
+                
+                # C. 如果寫入成功，強制清除快取讓畫面更新
+                if "成功" in write_msg:
+                    st.cache_data.clear()
+                    st.success("數據已刷新，請查看下方報表")
+                    # st.rerun() # 如果想讓畫面立即跳動可加上這行
+            else:
+                st.error(f"抓取異常：{result}")
 
 st.sidebar.divider() # 加入分隔線，區分自動化與原本的設定
 
@@ -253,6 +292,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
