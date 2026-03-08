@@ -405,7 +405,7 @@ with tab3:
             candidate_b = max(candidates_b, key=lambda x: omissions[x]) if candidates_b else max(omissions, key=omissions.get)
         
             # 號碼 C (規律溫波碼)：加入「循環避熱」邏輯
-            candidates_c = [n for n, o in omission_list if 3 <= o <= 5]
+            candidates_c = [n for n, o in omission_list if o == 5]
             
             # 【關鍵：循環檢測】如果快到循環末尾，過濾掉本循環出現過 2 次以上的號碼
             if is_end_of_cycle:
@@ -446,6 +446,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
