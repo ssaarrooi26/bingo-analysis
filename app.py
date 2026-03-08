@@ -386,7 +386,7 @@ with tab3:
             # 檢查上一期 (Index 0) 與 上上期 (Index 1) 是否同時出現
             last_draw = df.iloc[0]
             prev_draw = df.iloc[1]
-            streaking_nums = [n for n in last_draw.index if if str(n).isdigit) and last_draw.notnull()[n] and prev_draw.notnull()[n]]
+            streaking_nums = [n for n in last_draw.index if str(n).isdigit() and last_draw.notnull()[n] and prev_draw.notnull()[n]]
         
             # --- 3. 執行篩選策略 (移除守冷，強化節奏) ---
             omission_list = [(n, int(o)) for n, o in omissions.items() if str(n).isdigit()]
@@ -450,6 +450,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
