@@ -367,7 +367,7 @@ with tab3:
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
 
-        def smart_pick_3_advanced(df, omissions, interval_stats, latest_draw_id):
+        def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
             import random
             
             # --- 1. 循環狀態檢測 ---
@@ -443,6 +443,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
