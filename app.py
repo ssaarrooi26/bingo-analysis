@@ -425,6 +425,9 @@ with tab3:
 
         # UI 顯示
         recommendations = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
+        # 驗證邏輯顯示
+        if latest_draw_id % 5 in [0, 4]:
+            st.caption("🛡️ 已啟動「循環末端避熱」機制，過濾重複出現號碼。")
         st.subheader("🎯 系統精選：今日大數據三碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
@@ -443,6 +446,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
