@@ -76,8 +76,8 @@ def update_to_gsheets(draw_id, numbers):
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         
-        # 請確保這裡的名稱與你的 Google Sheet 檔案名稱完全一致
-        sheet = client.open("數據分析_2026").sheet6
+        # 請確保這裡的名稱與你的 Google Sheet 檔案名稱完全一致，永遠抓最左邊的第一個分頁
+        sheet = client.open("數據分析_2026").sheet1
         
         # 檢查期數是否已存在
         existing_ids = sheet.col_values(1)
@@ -292,6 +292,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
