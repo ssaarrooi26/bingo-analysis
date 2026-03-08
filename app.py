@@ -367,27 +367,64 @@ with tab3:
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
 
-        def smart_pick_3(df, omissions, interval_stats):
-            # 1. 找出最熱門區間 (從分段趨勢表中找最後一筆)
-            top_zone = interval_stats.iloc[-1].idxmax() # 找出出現次數最多的欄位
+        def smart_pick_3_advanced(df, omissions, interval_stats, latest_draw_id):
+            import random
             
-            # 2. 獲取候選清單
-            # 號碼 A: 熱門區間中遺漏值最低的 (追熱)
-            zone_range = range(1, 81) # 這裡要根據你的區間劃分邏輯來定
-            candidate_a = min(omissions, key=omissions.get) 
+            # --- 1. 循環狀態檢測 ---
+            remainder = latest_draw_id % 5
+            is_end_of_cycle = remainder in [0, 4] # 判斷是否為循環的第 4 或第 5 期
             
-            # 3. 號碼 B: 遺漏值最高的極端碼 (守冷)
-            candidate_b = max(omissions, key=omissions.get)
+            # 取得本循環已產生的資料 (假設循環從 remainder 1 開始)
+            current_cycle_count = remainder if remainder != 0 else 5
+            df_this_cycle = df.head(current_cycle_count)
             
-            # 4. 號碼 C: 符合 5 期循環邏輯的碼
-            # 找遺漏期數剛好是 4 或 5 的號碼
-            cycle_nums = [n for n, o in omissions.items() if o == 5]
-            candidate_c = cycle_nums[0] if cycle_nums else "10" # 若無則給個保底號
+            # 統計本循環中各號碼出現次數
+            # count() 會計算非空值數量
+            appearance_counts = df_this_cycle.notnull().sum()
+        
+            # --- 2. 連莊斜率分析 (Momentum) ---
+            # 檢查上一期 (Index 0) 與 上上期 (Index 1) 是否同時出現
+            last_draw = df.iloc[0]
+            prev_draw = df.iloc[1]
             
-            return [candidate_a, candidate_b, candidate_c]
+            # 找出連莊 2 期以上的號碼 (斜率向上)
+            streaking_nums = [n for n in last_draw.index if last_draw.notnull()[n] and prev_draw.notnull()[n]]
+        
+            # --- 3. 執行篩選策略 ---
+            omission_list = [(n, int(o)) for n, o in omissions.items()]
+            
+            # 號碼 A (強勢連動碼)：優先從「連莊號」中挑選
+            if streaking_nums:
+                candidate_a = random.choice(streaking_nums)
+            else:
+                # 若無連莊號，則抓遺漏 0-1 的熱門號
+                candidate_a = min(omissions, key=omissions.get)
+        
+            # 號碼 B (區間反彈碼)：極端守冷 (維持原邏輯)
+            candidates_b = [n for n, o in omission_list if o >= 15 or (o > 0 and o % 5 == 0)]
+            candidate_b = max(candidates_b, key=lambda x: omissions[x]) if candidates_b else max(omissions, key=omissions.get)
+        
+            # 號碼 C (規律溫波碼)：加入「循環避熱」邏輯
+            candidates_c = [n for n, o in omission_list if 3 <= o <= 5]
+            
+            # 【關鍵：循環檢測】如果快到循環末尾，過濾掉本循環出現過 2 次以上的號碼
+            if is_end_of_cycle:
+                candidates_c = [n for n in candidates_c if appearance_counts.get(n, 0) < 2]
+            
+            # 如果過濾完沒號碼，就從溫波號隨選
+            candidate_c = random.choice(candidates_c) if candidates_c else "10"
+        
+            # 確保不重複
+            final_picks = list(set([candidate_a, candidate_b, candidate_c]))
+            while len(final_picks) < 3:
+                # 保底機制
+                res = str(random.randint(1, 80)).zfill(2)
+                if res not in final_picks: final_picks.append(res)
+        
+            return final_picks[:3]
 
         # UI 顯示
-        recommendations = smart_pick_3(df, omissions, interval_stats)
+        recommendations = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
         st.subheader("🎯 系統精選：今日大數據三碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
@@ -406,6 +443,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
