@@ -180,10 +180,20 @@ with tab1:
 
 with tab2:
     st.header(f"每 {group_size} 期趨勢分析")
-    df['Group'] = (df.index // group_size) + 1
-    interval_stats = df.groupby('Group')[existing_cols].apply(lambda x: x.notnull().sum())
-    interval_stats.index = [f"第 {i*group_size-(group_size-1)}~{i*group_size} 筆" for i in interval_stats.index]
+    # 1. 為了讓「最小期數」是第一筆，我們先建立一個正序的副本 (舊 -> 新)
+    df_ascending = df.iloc[::-1].copy().reset_index(drop=True)
     
+    # 2. 分組計算：現在 index 0 是最舊的資料
+    df_ascending['Group'] = (df_ascending.index // group_size) + 1
+    
+    # 3. 計算每個區間的出現次數
+    interval_stats = df_ascending.groupby('Group')[existing_cols].apply(lambda x: x.notnull().sum())
+    
+    # 4. 重新定義索引名稱 (例如：第 1~5 筆)
+    interval_stats.index = [
+        f"第 {int((i-1)*group_size + 1)}~{int(i*group_size)} 筆" 
+        for i in interval_stats.index
+    ]
     
     # 2. 獲取數據的最大值，用來計算顏色比例
     max_val = interval_stats.max().max()
@@ -306,6 +316,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
