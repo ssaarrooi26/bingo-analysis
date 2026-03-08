@@ -242,7 +242,7 @@ with tab3:
             st.write(f"👉 距離下一個完整區間（5期）還需等待：**{wait_count}** 期")
             
         st.divider() # 分隔線
-
+    
     # 1. 準備基礎數據：計算每個號碼的總出現次數與最後出現期數
     latest_counts = df[existing_cols].notnull().sum()
     
@@ -274,6 +274,54 @@ with tab3:
     # 從熱門選 3 碼 + 冷門選 2 碼
     mix_picks = random.sample(hot_numbers, 3) + random.sample(cold_numbers, 2)
     st.success(f"本日推薦組合： {', '.join(mix_picks)}")
+
+    def calculate_omission(df, target_numbers):
+    omission_dict = {}
+    
+    # 確保 df 是按期數從大到小排 (最新在最上面)
+    df_sorted = df.sort_values(by='期數', ascending=False)
+    
+    for num in target_numbers:
+        # 找到該號碼欄位中，第一個「不是空值」的索引位置
+        # 因為 df 已經降序排，索引值剛好就等於遺漏期數
+        not_null_indices = df_sorted[df_sorted[num].notnull()].index
+        
+        if not not_null_indices.empty:
+            # 第一個出現的位置索引即為遺漏期數
+            # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
+            omission_dict[num] = not_null_indices[0]
+        else:
+            # 如果整張表都沒出現過，設為資料總長度
+            omission_dict[num] = len(df_sorted)
+            
+    return omission_dict
+
+    st.subheader("📊 號碼遺漏值統計 (Omission Analysis)")
+    
+    # 計算遺漏值
+    omissions = calculate_omission(df, existing_cols)
+    
+    # 轉為 DataFrame 方便顯示
+    omission_df = pd.DataFrame(list(omissions.items()), columns=['球號', '遺漏期數'])
+    omission_df = omission_df.sort_values(by='遺漏期數', ascending=False)
+    
+    # 視覺化呈現：最冷門的號碼
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.write("🔥 **目前最久未開號碼**")
+        st.table(omission_df.head(10).reset_index(drop=True))
+        
+    with col2:
+        st.write("📈 **遺漏分佈圖**")
+        # 使用直條圖顯示遺漏狀況
+        st.bar_chart(omission_df.set_index('球號')['遺漏期數'])
+
+    # --- 結合你的 5 期循環邏輯 ---
+    max_omission_num = omission_df.iloc[0]['球號']
+    max_omission_val = omission_df.iloc[0]['遺漏期數']
+    
+    st.info(f"💡 **觀察建議**：號碼 **{max_omission_num}** 已經連續 **{max_omission_val}** 期未開出了。搭配當前循環剩餘期數，可以觀察其是否會在近期反彈。")
 
     # 取得最新兩期數據
     if len(df) >= 2:
@@ -363,6 +411,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
