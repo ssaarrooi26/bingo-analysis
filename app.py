@@ -164,7 +164,7 @@ st.sidebar.divider() # 加入分隔線，區分自動化與原本的設定
 st.sidebar.header("設定選項")
 group_size = st.sidebar.slider("區間期數 (每幾期一組)", 1, 20, 5)
 target_numbers = [str(i) for i in range(1, 81)]
-existing_cols = [col for col in target_numbers if col in df.columns]
+existing_cols = [col for col in target_numbers if col in df.columns and col != '期數']
 
 # 3. 功能分頁
 tab1, tab2, tab3 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議"])
@@ -449,6 +449,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
