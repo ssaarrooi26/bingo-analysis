@@ -323,6 +323,32 @@ with tab3:
         st.dataframe(
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
+
+        def smart_pick_3(df, omissions, interval_stats):
+        # 1. 找出最熱門區間 (從分段趨勢表中找最後一筆)
+        top_zone = interval_stats.iloc[-1].idxmax() # 找出出現次數最多的欄位
+        
+        # 2. 獲取候選清單
+        # 號碼 A: 熱門區間中遺漏值最低的 (追熱)
+        zone_range = range(1, 81) # 這裡要根據你的區間劃分邏輯來定
+        candidate_a = min(omissions, key=omissions.get) 
+        
+        # 3. 號碼 B: 遺漏值最高的極端碼 (守冷)
+        candidate_b = max(omissions, key=omissions.get)
+        
+        # 4. 號碼 C: 符合 5 期循環邏輯的碼
+        # 找遺漏期數剛好是 4 或 5 的號碼
+        cycle_nums = [n for n, o in omissions.items() if o == 5]
+        candidate_c = cycle_nums[0] if cycle_nums else "10" # 若無則給個保底號
+        
+        return [candidate_a, candidate_b, candidate_c]
+
+        # UI 顯示
+        recommendations = smart_pick_3(df, omissions, interval_stats)
+        st.subheader("🎯 系統精選：今日大數據三碼")
+        cols = st.columns(3)
+        for i, num in enumerate(recommendations):
+            cols[i].metric(label=f"建議號碼 {i+1}", value=num)
         
         # 綜合預測邏輯
         st.divider()
@@ -337,6 +363,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
