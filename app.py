@@ -10,45 +10,58 @@ from bs4 import BeautifulSoup
 def test_scraping():
     url = "https://lotto.auzo.tw/RK.php"
     try:
-        # 模擬瀏覽器行為，避免被網站阻擋
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
         response = requests.get(url, headers=headers, timeout=10)
         response.encoding = 'utf-8'
         
         if response.status_code != 200:
-            return None, f"連線失敗，狀態碼：{response.status_code}"
-
+            return None, f"連線失敗，代碼：{response.status_code}"
+            
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 定位開獎表格：該網站的開獎通常在第一個 table 內
-        table = soup.find('table')
-        if not table:
-            return None, "找不到數據表格"
+        # 改用更寬鬆的方式尋找含有數據的表格
+        tables = soup.find_all('table')
+        if not tables:
+            return None, "找不到任何表格 (Table)"
 
-        rows = table.find_all('tr')
-        # 抓取最新一列 (通常是 index 1，因為 index 0 是表頭)
-        target_row = rows[1]
-        cols = target_row.find_all('td')
+        # 遍歷表格尋找含有「期數」字眼的列
+        target_row = None
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = row.find_all(['td', 'th'])
+                if len(cells) > 5:  # Bingo Bingo 至少有 20 碼 + 期數，欄位一定很多
+                    # 排除掉標題列 (如果第一格內容是"期數"二字就跳過)
+                    first_cell = cells[0].get_text(strip=True)
+                    if "期" in first_cell or first_cell.isdigit():
+                        if first_cell.isdigit(): # 找到真正的數字期數了
+                            target_row = cells
+                            break
+            if target_row: break
+
+        if not target_row:
+            return None, "無法定位到有效的開獎資料列"
+
+        # 提取資料
+        draw_id = target_row[0].get_text(strip=True)
         
-        # 提取期數
-        draw_id = cols[0].get_text(strip=True)
-        
-        # 提取號碼 (該網站通常將 20 個號碼放在後續的 td 或 span 內)
-        # 我們過濾出所有 1-80 的數字
-        raw_numbers = [c.get_text(strip=True) for c in cols]
+        # 提取所有數字並過濾 1-80
         numbers = []
-        for val in raw_numbers:
-            # 去除可能的前導零並確認是數字
-            clean_val = val.lstrip('0')
-            if clean_val.isdigit() and 1 <= int(clean_val) <= 80:
-                numbers.append(val) # 保留原始格式(如 05)
+        for cell in target_row:
+            val = cell.get_text(strip=True).lstrip('0')
+            if val.isdigit() and 1 <= int(val) <= 80:
+                # 補回 0 (例如 5 變 05) 保持格式統一
+                numbers.append(val.zfill(2))
 
-        # 只要抓到 20 個號碼就代表成功
+        if len(numbers) < 20:
+            return None, f"抓取號碼不足 (僅抓到 {len(numbers)} 碼)"
+
         return draw_id, numbers[:20]
 
     except Exception as e:
-        return None, str(e)
-
+        return None, f"程式發生錯誤: {str(e)}"
 
 
 # 1. 設定你的 Google 試算表 CSV 導出連結
@@ -240,6 +253,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
