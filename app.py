@@ -276,25 +276,25 @@ with tab3:
     st.success(f"本日推薦組合： {', '.join(mix_picks)}")
 
     def calculate_omission(df, target_numbers):
-    omission_dict = {}
-    
-    # 確保 df 是按期數從大到小排 (最新在最上面)
-    df_sorted = df.sort_values(by='期數', ascending=False)
-    
-    for num in target_numbers:
-        # 找到該號碼欄位中，第一個「不是空值」的索引位置
-        # 因為 df 已經降序排，索引值剛好就等於遺漏期數
-        not_null_indices = df_sorted[df_sorted[num].notnull()].index
+        omission_dict = {}
         
-        if not not_null_indices.empty:
-            # 第一個出現的位置索引即為遺漏期數
-            # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
-            omission_dict[num] = not_null_indices[0]
-        else:
-            # 如果整張表都沒出現過，設為資料總長度
-            omission_dict[num] = len(df_sorted)
+        # 確保 df 是按期數從大到小排 (最新在最上面)
+        df_sorted = df.sort_values(by='期數', ascending=False)
+        
+        for num in target_numbers:
+            # 找到該號碼欄位中，第一個「不是空值」的索引位置
+            # 因為 df 已經降序排，索引值剛好就等於遺漏期數
+            not_null_indices = df_sorted[df_sorted[num].notnull()].index
             
-    return omission_dict
+            if not not_null_indices.empty:
+                # 第一個出現的位置索引即為遺漏期數
+                # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
+                omission_dict[num] = not_null_indices[0]
+            else:
+                # 如果整張表都沒出現過，設為資料總長度
+                omission_dict[num] = len(df_sorted)
+                
+        return omission_dict
 
     st.subheader("📊 號碼遺漏值統計 (Omission Analysis)")
     
@@ -411,6 +411,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
