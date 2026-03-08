@@ -18,6 +18,14 @@ st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 def load_data(url):
     # Google Sheets 導出的 CSV 統一都是 utf-8，不需要擔心編碼問題
     df = pd.read_csv(url)
+
+# 1. 確保「期數」這欄被視為數字（避免 100 排在 2 前面）
+    if '期數' in df.columns:
+        df['期數'] = pd.to_numeric(df['期數'], errors='coerce')
+        
+        # 2. 強制降序排列：大期數（最新）排在最上面
+        # ascending=False 代表由大到小排
+        df = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
     return df
 
 try:
@@ -173,6 +181,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
