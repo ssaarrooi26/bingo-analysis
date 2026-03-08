@@ -84,10 +84,24 @@ def update_to_gsheets(draw_id, numbers):
         if str(draw_id) in existing_ids:
             return f"ℹ️ 期數 {draw_id} 已存在，無需重複寫入。"
         
-        # 準備資料行：[期數, 號碼01, 號碼02...號碼20]
-        new_row = [draw_id] + numbers
-        sheet.insert_row(new_row, index=2) # 插入在標題列下方
-        return f"✅ 成功！期數 {draw_id} 已寫入雲端表單。"
+        # 建立對位資料行
+        # 建立一個包含 81 個欄位的列表，初始值全部為空字串 ""
+        # index 0 是期數，index 1~80 對應號碼 1~80
+        row_data = [""] * 81
+        row_data[0] = draw_id  # 第一欄放入期數
+        
+        for num_str in numbers:
+            num_int = int(num_str) # 轉成整數，例如 "05" -> 5
+            if 1 <= num_int <= 80:
+                # 關鍵：號碼是幾號，就填在第幾欄 (例如 5 號填在 index 5)
+                # 這樣在 Google Sheets 裡，5 號就會剛好在 E 欄 (第 5 欄) 下方
+                row_data[num_int] = num_str 
+        
+        # 3. 插入到試算表第二列
+        sheet.insert_row(row_data, index=2)
+        
+        return f"✅ 成功！期數 {draw_id} 已完成號碼對位寫入。"
+        
     except Exception as e:
         return f"❌ 寫入失敗: {str(e)}"
 
@@ -292,6 +306,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
