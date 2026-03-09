@@ -369,56 +369,59 @@ with tab3:
 
         def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
             import random
+            import pandas as pd
             
-            # --- 1. 循環狀態檢測 ---
-            remainder = latest_draw_id % 5
-            is_end_of_cycle = remainder in [0, 4] # 判斷是否為循環的第 4 或第 5 期
+            # --- 1. 取得純球號欄位 ---
+            ball_cols = [c for c in df.columns if str(c).isdigit()]
             
-            # 取得本循環已產生的資料 (假設循環從 remainder 1 開始)
-            current_cycle_count = remainder if remainder != 0 else 5
-            df_this_cycle = df.head(current_cycle_count)
+            # --- 2. 獲取上一期 (Index 0) 的開獎號碼 ---
+            last_draw_nums = [n for n in df.iloc[0].index if n in ball_cols and df.iloc[0].notnull()[n]]
             
-            # 統計本循環中各號碼出現次數
-            # count() 會計算非空值數量
-            appearance_counts = df_this_cycle.notnull().sum()
+            # --- 3. 分析歷史連動響應 (拖牌邏輯) ---
+            # 我們分析最近 100 期，找出上一期開出這些號碼後，下一期最常出現誰
+            linkage_counts = {}
+            sample_size = min(len(df) - 1, 100)
             
-            # --- 2. 連莊斜率 (Candidate A 維持追熱) ---
-            # 檢查上一期 (Index 0) 與 上上期 (Index 1) 是否同時出現
-            last_draw = df.iloc[0]
-            prev_draw = df.iloc[1]
-            streaking_nums = [n for n in last_draw.index if str(n).isdigit() and last_draw.notnull()[n] and prev_draw.notnull()[n]]
+            for i in range(sample_size):
+                # 這一期的號碼 (作為基準)
+                current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+                # 下一期的號碼 (觀察響應)
+                next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
+                
+                # 如果這一期包含了我們關注的號碼（這裡以最近一期為準）
+                if current_set.intersection(set(last_draw_nums)):
+                    for num in next_gen_nums:
+                        linkage_counts[num] = linkage_counts.get(num, 0) + 1
         
-            # --- 3. 執行篩選策略 (移除守冷，強化節奏) ---
-            omission_list = [(n, int(o)) for n, o in omissions.items() if str(n).isdigit()]
+            # 排序連動強度
+            sorted_linkage = sorted(linkage_counts.items(), key=lambda x: x[1], reverse=True)
+            # 排除掉上一期已經開過的 (避開剛開出的，抓即將響應的)
+            linkage_candidates = [n[0] for n in sorted_linkage if n[0] not in last_draw_nums]
+        
+            # --- 4. 根據響應強度分配三碼 ---
             
-            # 號碼 A (強勢碼)：追連莊或熱門
-            if streaking_nums:
-                candidate_a = random.choice(streaking_nums)
-            else:
-                candidate_a = min(omissions, key=omissions.get)
+            # A 碼：最強響應碼 (歷史連動次數最高)
+            candidate_a = linkage_candidates[0] if len(linkage_candidates) > 0 else "05"
+            
+            # B 碼：次強響應碼 (或是與 A 碼同尾數的響應號)
+            candidate_b = linkage_candidates[1] if len(linkage_candidates) > 1 else "15"
+            
+            # C 碼：鄰居連動碼 (取 A 碼的左右鄰居，增加叢集機會)
+            try:
+                a_int = int(candidate_a)
+                neighbor = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
+                candidate_c = neighbor
+            except:
+                candidate_c = linkage_candidates[2] if len(linkage_candidates) > 2 else "25"
         
-            # 號碼 B (標準節奏碼)：鎖定遺漏值為 5 (精準對位)
-            # 尋找剛好符合一個循環週期未出現的號碼
-            candidates_b = [n for n, o in omission_list if o == 5]
-            if is_end_of_cycle: # 避熱
-                candidates_b = [n for n in candidates_b if appearance_counts.get(n, 0) < 2]
-            candidate_b = random.choice(candidates_b) if candidates_b else "08" # 預設幸運號
-        
-            # 號碼 C (擴展節奏碼)：鎖定遺漏值為 10 或 15 (長週期對位)
-            # 尋找符合 2 倍或 3 倍循環週期的規律號碼
-            candidates_c = [n for n, o in omission_list if o in [10, 15]]
-            if is_end_of_cycle: # 避熱【關鍵：循環檢測】如果快到循環末尾，過濾掉本循環出現過 2 次以上的號碼
-                candidates_c = [n for n in candidates_c if appearance_counts.get(n, 0) < 2]
-            candidate_c = random.choice(candidates_c) if candidates_c else "16"
-        
-            # 確保不重複
+            # --- 5. 最終去重與保底 ---
             final_picks = list(set([candidate_a, candidate_b, candidate_c]))
-            final_picks = [p for p in final_picks if str(p).isdigit()]
             while len(final_picks) < 3:
                 res = str(random.randint(1, 80)).zfill(2)
                 if res not in final_picks: final_picks.append(res)
         
-            return final_picks[:3]
+            return sorted(final_picks[:3])
+
 
         # UI 顯示
         recommendations = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
@@ -450,6 +453,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
