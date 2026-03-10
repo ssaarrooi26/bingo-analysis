@@ -467,36 +467,7 @@ with tab3:
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
 
-def run_backtest(df, calculate_omissions_func, get_interval_stats_func):
-    import pandas as pd
-    test_range, window = 50, 5
-    results = []
-    
-    for i in range(window, test_range + window):
-        if i + 100 >= len(df): break
-        
-        history_df = df.iloc[i:]
-        future_5_df = df.iloc[i-window:i]
-        
-        omissions = calculate_omissions_func(history_df)
-        interval_stats = get_interval_stats_func(history_df)
-        
-        recs, _ = smart_pick_3(history_df, omissions, interval_stats, history_df.index[0])
-        
-        future_nums = []
-        for _, row in future_5_df.iterrows():
-            draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
-            future_nums.extend(draw)
-        
-        hits = [n for n in recs if n in set(future_nums)]
-        results.append({
-            "期數": df.index[i],
-            "建議": ", ".join(recs),
-            "命中": ", ".join(hits),
-            "命中數": len(hits),
-            "成功": 1 if len(hits) > 0 else 0
-        })
-    return pd.DataFrame(results)   
+
         
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測")
@@ -520,6 +491,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
