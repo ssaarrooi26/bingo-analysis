@@ -371,40 +371,45 @@ with tab3:
             import random
             import pandas as pd
             
+            # 1. 取得純球號與最新一期號碼
             ball_cols = [c for c in df.columns if str(c).isdigit()]
             last_draw_row = df.iloc[0]
             last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
             
-            # --- 1. 初始化評分表 ---
+            # 2. 初始化評分表
             scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
         
-            # --- 2. 維度一：連動響應 (加強即時權重) ---
-            # 分為「極短期(10期)」與「長期(50期)」
-            for i in range(min(len(df)-1, 50)):
+            # --- 維度一：加強版短期連動 (權重最高) ---
+            # 分析近 50 期，但前 10 期的權重加倍，捕捉即時盤勢
+            sample_size = min(len(df) - 1, 50)
+            for i in range(sample_size):
                 current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
                 next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
                 if current_set.intersection(set(last_draw_nums)):
-                    weight = 3.0 if i < 10 else 1.0 # 越近期的連動權重越高
+                    weight = 3.5 if i < 10 else 1.2 # 近 10 期連動賦予強大權重
                     for num in next_gen_nums:
                         if num in scores: scores[num] += weight
         
-            # --- 3. 維度二：鄰居觸發邏輯 (New! 縮短時差關鍵) ---
-            # 如果上一期開了 N，則 N-1 和 N+1 獲得「引爆加分」
+            # --- 維度二：鄰居觸發/補位邏輯 (縮短時差關鍵) ---
             for num in last_draw_nums:
                 n_int = int(num)
-                neighbors = []
-                if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
-                if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
-                for nb in neighbors:
-                    if nb in scores: scores[nb] += 2.5 # 給予強大的引爆權重
+                # 檢查左右鄰居 (N-1, N+1)
+                for diff in [-1, 1]:
+                    nb = str(n_int + diff).zfill(2)
+                    if nb in scores:
+                        # 如果鄰居剛好遺漏 1-3 期 (代表處於即將回補的黃金期)
+                        if omissions.get(nb, 99) in [1, 2, 3]:
+                            scores[nb] += 4.0 # 賦予「爆發引爆分」
+                        else:
+                            scores[nb] += 1.5
         
-            # --- 4. 維度三：遺漏節奏與區間 (維持穩定) ---
+            # --- 維度三：遺漏轉折與區間修正 ---
             for num, o in omissions.items():
                 if num in scores:
-                    if o in [3, 5, 8]: scores[num] += 2.0
-                    if o == 0: scores[num] -= 2.0 # 加重扣分，避免追剛開出的號碼
+                    if o in [3, 5, 8, 13]: scores[num] += 2.5 # 費氏數列節奏點
+                    if o == 0: scores[num] -= 5.0 # 強力排除上一期，專注於 5 期內「新出現」的值
         
-            # 區間加熱... (維持原本的安全過濾版本)
+            # 區間熱力加分 (安全過濾版)
             zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
             if zone_cols:
                 top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
@@ -412,16 +417,20 @@ with tab3:
                     parts = str(top_zone_name).split('-')
                     for i in range(int(parts[0]), int(parts[1]) + 1):
                         n_str = str(i).zfill(2)
-                        if n_str in scores: scores[n_str] += 1.0
+                        if n_str in scores: scores[n_str] += 1.2
                 except: pass
         
-            # --- 5. 排序候選 ---
+            # 3. 排序並選出前三強
             scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            # 排除上一期已開出的，確保抓到的是「即將彈出」的號碼
+            # 此處已由 o==0 的扣分與此行雙重保險，確保抓到的是潛力新碼
             final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            recs = sorted(final_candidates[:3])
-            return recs, scores
+            # 保底機制
+            while len(final_candidates) < 3:
+                backup = str(random.randint(1, 80)).zfill(2)
+                if backup not in final_candidates: final_candidates.append(backup)
+        
+            return final_candidates[:3], scores
 
 
         # UI 顯示
@@ -468,6 +477,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
