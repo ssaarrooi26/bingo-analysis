@@ -473,6 +473,24 @@ with tab3:
         
         st.caption("註：加權總分綜合了「歷史拖牌連動」、「遺漏轉折週期」與「當前熱門區間」三大指標。")
 
+        # --- 手動重置衰減狀態按鈕 ---
+        st.write("---")
+        st.subheader("⚙️ 系統控制")
+        
+        if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
+            # 清空 session_state 中的紀錄
+            st.session_state.pick_history = {}
+            st.success("已成功重置！所有號碼的「疲勞期」紀錄已清空，下一期將重新計算。")
+            # 強制重新執行，讓畫面立即更新
+            st.rerun()
+        
+        # 顯示目前的追蹤狀態（可選，方便你觀察誰正在被衰減）
+        if st.session_state.pick_history:
+            with st.expander("查看目前追蹤中的號碼"):
+                st.write("以下號碼若連續出現，將會逐期扣分：")
+                for num, count in st.session_state.pick_history.items():
+                    st.text(f"號碼 {num}：已連續推薦 {count} 期")
+
         # --- 關鍵修正區塊 ---
         # 這裡用 st.write 先測試，確保邏輯有跑進來
         # remainder == 0 是指 5 的倍數 (例如期數 115)
@@ -495,6 +513,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
