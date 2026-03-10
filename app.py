@@ -371,12 +371,11 @@ with tab3:
             import random
             import pandas as pd
             
-            # 取得純球號欄位
             ball_cols = [c for c in df.columns if str(c).isdigit()]
             last_draw_nums = [n for n in df.iloc[0].index if n in ball_cols and df.iloc[0].notnull()[n]]
             
             # --- 1. 初始化評分表 ---
-            scores = {str(i).zfill(2): 0 for i in range(1, 81)}
+            scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
         
             # --- 2. 維度一：連動響應加分 (權重 1.5) ---
             sample_size = min(len(df) - 1, 50)
@@ -391,63 +390,52 @@ with tab3:
             for num, o in omissions.items():
                 if num in scores:
                     if o in [3, 5, 8]: scores[num] += 2.0
-                    if o == 0: scores[num] -= 1.0
+                    if o == 0: scores[num] -= 1.5  # 剛開出的加強扣分
         
-            # --- 4. 維度三：區間熱力加分 (修正後的安全版) ---
-            # 過濾出真正的區間欄位 (例如 "01-10", "11-20")
+            # --- 4. 維度三：區間熱力加分 (權重 1.0) ---
             zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
-            
             if zone_cols:
-                # 只在符合格式的區間中找出最大值
                 top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
                 try:
                     parts = str(top_zone_name).split('-')
                     if len(parts) == 2:
-                        start_num = int(parts[0])
-                        end_num = int(parts[1])
-                        for i in range(start_num, end_num + 1):
+                        for i in range(int(parts[0]), int(parts[1]) + 1):
                             n_str = str(i).zfill(2)
                             if n_str in scores: scores[n_str] += 1.0
-                except:
-                    pass # 格式不合就跳過，不中斷程式
+                except: pass
         
-            # --- 5. 排序並過濾，確保 5 期內命中潛力 ---
+            # --- 5. 排序候選 ---
             scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            # 排除上一期已出的號碼 (追求新開出的號碼)
             final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            # 安全機制：確保至少有三個號碼
-            while len(final_candidates) < 5:
-                backup = str(random.randint(1, 80)).zfill(2)
-                if backup not in final_candidates:
-                    final_candidates.append(backup)
-        
-            # 最終選碼
-            candidate_a = final_candidates[0]
-            candidate_b = final_candidates[1]
+            # 選出前三強
+            recs = sorted(final_candidates[:3])
             
-            # C 碼採鄰居補償 (叢集效應)
-            try:
-                a_int = int(candidate_a)
-                c_val = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
-                # 如果 C 碼不理想，取第三高分的候選
-                if c_val in last_draw_nums or c_val in [candidate_a, candidate_b]:
-                    candidate_c = final_candidates[2]
-                else:
-                    candidate_c = c_val
-            except:
-                candidate_c = final_candidates[2]
-        
-            return sorted([candidate_a, candidate_b, candidate_c])
+            # 回傳建議號碼與完整的評分表
+            return recs, scores
 
 
         # UI 顯示
-        recommendations = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
+        # 呼叫更新後的函數
+        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
         
-        st.subheader("🎯 系統精選：今日大數據三碼")
+        st.subheader("🎯 高精度交叉驗證選碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
-            cols[i].metric(label=f"建議號碼 {i+1}", value=num)
+            cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {all_scores[num]}")
+        
+        # --- 新增：顯示前 10 名的高分潛力股 ---
+        st.write("---")
+        st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
+        
+        # 將分數轉為 DataFrame 方便顯示
+        score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
+        score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
+        
+        # 使用 Streamlit 的 dataframe 顯示
+        st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+        
+        st.caption("註：加權總分綜合了「歷史拖牌連動」、「遺漏轉折週期」與「當前熱門區間」三大指標。")
 
         # --- 關鍵修正區塊 ---
         # 這裡用 st.write 先測試，確保邏輯有跑進來
@@ -471,6 +459,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
