@@ -296,34 +296,45 @@ def run_backtest(df, weights):
     window = 5       
     results = []
     
+    # 建立球號清單以供後續比對
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    
     for i in range(window, test_range + window):
         if i + 50 >= len(df): break 
         
-        current_df = df.iloc[i:]  # 模擬當時的歷史
-        actual_future_5 = df.iloc[i-window:i] # 之後的實際結果
+        # 模擬當時的歷史：從第 i 期往後的資料
+        current_df = df.iloc[i:]  
+        # 之後的實際結果：第 i 期之前的 5 期 (i-5 到 i-1)
+        actual_future_5 = df.iloc[i-window:i] 
         
-        # --- 呼叫你現有的統計函數 ---
-        # 請確保這些函數名稱與你 app.py 中定義的一致
+        # 呼叫統計函數
         omissions = calculate_omissions(current_df) 
         interval_stats = get_interval_stats(current_df)
         
-        # 執行回測專用選號
+        # 執行選號
         recs = smart_pick_3_backtest(current_df, omissions, interval_stats, weights)
         
-        # 驗證命中
-        future_nums = []
+        # 驗證命中 (修正比對邏輯，確保與 Ball Cols 一致)
+        future_nums = set()
         for _, row in actual_future_5.iterrows():
-            draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
-            future_nums.extend(draw)
+            # 取得該期所有開出的號碼並轉為 zfill(2) 格式
+            draw = [str(int(row[c])).zfill(2) for c in ball_cols if pd.notnull(row[c])]
+            future_nums.update(draw)
         
-        hit_nums = [n for n in recs if n in set(future_nums)]
+        hit_nums = [n for n in recs if n in future_nums]
+        
+        # --- 修正重點：安全取得期號 ---
+        # 使用 index[i] 替代 .name，避免 Series 屬性衝突
+        draw_id = df.index[i] 
+        
         results.append({
-            "期數": df.iloc[i].name,
+            "期數": draw_id,
             "建議號碼": ", ".join(recs),
             "命中數": len(hit_nums),
             "命中號碼": ", ".join(hit_nums),
             "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
         })
+        
     return pd.DataFrame(results)
 
 # 2. 側邊欄：設定參數
@@ -705,6 +716,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
