@@ -672,9 +672,10 @@ with tab4: # 第四個 Tab
     with st.expander("⚙️ 模擬實驗室權重微調", expanded=False):
         bw_n = st.slider("模擬-鄰居觸發", 1.0, 10.0, 4.5, key="back_n")
         bw_t = st.slider("模擬-短期連動", 1.0, 10.0, 3.5, key="back_t")
-        bw_f = st.slider("模擬-能量回流", 0.0, 5.0, 2.0, key="back_f")
+        bw_f = st.slider("模擬-能量回流", 0.0, 10.0, 4.0, key="back_f") # 建議調高上限至 10.0
         bw_o = st.slider("模擬-遺漏節奏", 1.0, 5.0, 2.5, key="back_o")
 
+    # 封裝權重字典
     backtest_weights = {
         'neighbor': bw_n, 
         'trend': bw_t, 
@@ -684,38 +685,50 @@ with tab4: # 第四個 Tab
 
     if st.button("🚀 開始執行 50 期回測"):
         with st.spinner("系統正在模擬歷史選號並驗證結果..."):
-            backtest_df = run_backtest(df)
+            # 【關鍵修正】：傳入 backtest_weights 參數
+            backtest_df = run_backtest(df, backtest_weights)
 
-            # --- 加入檢查機制 ---
-            if backtest_df.empty:
+            # --- 檢查機制 ---
+            if backtest_df is None or backtest_df.empty:
                 st.warning("回測未產生任何結果，請檢查數據源是否足夠（需大於 100 期）。")
             elif "是否成功(1中以上)" not in backtest_df.columns:
                 st.error("回測資料表格式錯誤，請檢查欄位定義。")
-                st.write("目前的欄位有：", backtest_df.columns.tolist()) # 幫助除錯
+                st.write("目前的欄位有：", backtest_df.columns.tolist()) 
             else:
-                # 欄位確定存在才執行加總
+                # 計算統計數據
                 total_tests = len(backtest_df)
                 success_tests = backtest_df["是否成功(1中以上)"].sum()
-            
-            # 計算統計數據
-            total_tests = len(backtest_df)
-            success_tests = backtest_df["是否成功(1中以上)"].sum()
-            win_rate = (success_tests / total_tests) * 100
-            
-            # 顯示儀表板
-            c1, c2, c3 = st.columns(3)
-            c1.metric("回測總期數", f"{total_tests} 期")
-            c2.metric("5期內命中成功", f"{success_tests} 次")
-            c3.metric("總體勝率", f"{win_rate:.1f}%")
-            
-            # 顯示詳細回測清單
-            st.write("### 詳細回測紀錄")
-            st.dataframe(backtest_df.style.applymap(
-                lambda x: 'background-color: #d4edda' if x > 0 else '', subset=['是否成功(1中以上)']
-            ), use_container_width=True)
-            
-            # 權重優化建議
-            st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+                # 避免除以 0 的安全檢查
+                win_rate = (success_tests / total_tests * 100) if total_tests > 0 else 0
+                
+                # 顯示儀表板
+                st.subheader("🏁 回測總結報告")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("回測總期數", f"{total_tests} 期")
+                c2.metric("成功獲中次數", f"{success_tests} 次")
+                c3.metric("預測勝率", f"{win_rate:.1f}%")
+                
+                # 顯示詳細回測清單
+                st.write("### 📝 詳細回測紀錄")
+                
+                # 優化：根據命中數給予不同顏色
+                def highlight_hits(val):
+                    if val >= 2: return 'background-color: #ffcccc; color: black; font-weight: bold' # 中兩顆以上給紅色
+                    if val == 1: return 'background-color: #d4edda; color: black' # 中一顆給綠色
+                    return ''
+
+                st.dataframe(
+                    backtest_df.style.applymap(highlight_hits, subset=['命中數']),
+                    use_container_width=True,
+                    height=400
+                )
+                
+                # 權重優化建議
+                st.divider()
+                st.info("💡 **權重優化建議**：\n"
+                        "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
+                        "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
