@@ -142,8 +142,9 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
     import streamlit as st
     
     # --- 權重初始化 ---
+    # 進攻與防禦模式共享基礎權重，但防禦模式會額外啟用過熱扣分與能量回流
     if weights is None:
-        weights = {'neighbor': 4.5, 'flow': 2.0, 'trend': 3.5, 'omit': 2.5}
+        weights = {'neighbor': 4.5, 'flow': 4.0, 'trend': 3.5, 'omit': 2.5}
     
     # 1. 初始化 Session State (僅在啟用防守模式時重要)
     if 'pick_history' not in st.session_state:
@@ -163,7 +164,9 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
         for diff in [-1, 1]:
             nb = str(n_int + diff).zfill(2)
             if nb in scores:
-                scores[nb] += weights['neighbor'] # 直接加分，不設遺漏期限制
+                # 為了讓防禦模式更有感，若開啟防禦，鄰居分數稍微降低，否則維持高強度
+                w_nb = weights['neighbor'] if not enable_defense else weights['neighbor'] * 0.6
+                scores[nb] += w_nb
 
     # 連動響應：維持極短期與長期權重
     for i in range(min(len(df)-1, 50)):
@@ -177,7 +180,9 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
     for num, o in omissions.items():
         if num in scores:
             if o in [3, 5, 8]: scores[num] += weights['omit']
-            if o == 0: scores[num] -= 2.0 # 輕微扣分，維持先前版本的適度冷卻
+            # 強制冷卻力道：防禦模式下扣分更重，避免開關無感
+            omit_penalty = -6.0 if enable_defense else -2.0
+            if o == 0: scores[num] += omit_penalty
 
     # --- 維度三：區間熱力 (防守模式開關) ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
@@ -193,11 +198,13 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
             except: pass
         else:
             # 【防守模式】：過熱保護與能量回流 (目前方案)
+            # 強化干預力道，確保號碼會跳轉
             for z in zone_cols:
                 start, end = map(int, z.split('-'))
                 count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
                 if count >= 4:
-                    for i in range(start, end + 1): scores[str(i).zfill(2)] -= 3.0
+                    for i in range(start, end + 1): 
+                        scores[str(i).zfill(2)] -= 10.0 # 扣分從 3 改為 10
                     adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
                     if adj_low in scores: scores[adj_low] += weights['flow']
                     if adj_high in scores: scores[adj_high] += weights['flow']
@@ -227,9 +234,9 @@ def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     """
     import pandas as pd
     
-    # 提取權重參數 (若外部未傳入則使用預設值)
+    # 提取權重參數
     w_neighbor = weights.get('neighbor', 4.5)
-    w_flow = weights.get('flow', 2.0)
+    w_flow = weights.get('flow', 4.0) # 同步強化
     w_trend = weights.get('trend', 3.5)
     w_omit = weights.get('omit', 2.5)
 
@@ -237,71 +244,50 @@ def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     last_draw_row = df.iloc[0]
     last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
     
-    # 初始化評分表 (01-80)
+    # 初始化評分表
     scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
 
-    # --- 維度一：鄰居與爆發力 ---
+    # --- 維度一：鄰居與爆發力 (對齊 smart_pick_3 邏輯) ---
     for num in last_draw_nums:
         n_int = int(num)
         for diff in [-1, 1]:
             nb = str(n_int + diff).zfill(2)
             if nb in scores:
-                # 鄰居觸發 + 黃金回補期 (遺漏 1-3) = 爆發引爆分
-                if omissions.get(nb, 99) in [1, 2, 3]:
-                    scores[nb] += w_neighbor
-                else:
-                    scores[nb] += 1.5
+                scores[nb] += w_neighbor # 改回無差別加分
 
-    # --- 維度二：區間飽和度與能量回流 (完整補回) ---
+    # --- 維度二：區間飽和度與能量回流 (強化扣分感) ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
     if zone_cols:
         for z in zone_cols:
             try:
                 start, end = map(int, z.split('-'))
-                # 統計該區間在上一期開出的球數
                 count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
-                
-                if count >= 4: # 飽和門檻
-                    # 飽和區號碼扣分 (降溫)
+                if count >= 4: 
                     for i in range(start, end + 1):
-                        scores[str(i).zfill(2)] -= 3.0
-                    
-                    # 能量回流：給予相鄰區間邊界碼加分
+                        scores[str(i).zfill(2)] -= 8.0 # 強化回測時的規避感
                     adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
                     if adj_low in scores: scores[adj_low] += w_flow
                     if adj_high in scores: scores[adj_high] += w_flow
-            except:
-                continue
+            except: continue
 
     # --- 維度三：短期連動與趨勢 ---
     for i in range(min(len(df)-1, 50)):
-        # 取得歷史上的開獎組合
         current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-        # 取得該期隨後開出的號碼
         next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-        
-        # 如果當時的開獎與「最新一期」有重疊
         if current_set.intersection(set(last_draw_nums)):
-            weight = w_trend if i < 10 else 1.0 # 近 10 期連動權重最高
+            weight = w_trend if i < 10 else 1.0 
             for num in next_gen_nums:
                 if num in scores: scores[num] += weight
 
     # --- 維度四：遺漏節奏 ---
     for num, o in omissions.items():
         if num in scores:
-            # 費氏數列節奏或關鍵遺漏值加分
-            if o in [3, 5, 8, 13]: 
-                scores[num] += w_omit
-            # 避開剛開出的號碼 (強制冷卻)
-            if o == 0: 
-                scores[num] -= 6.0
+            if o in [3, 5, 8, 13]: scores[num] += w_omit
+            if o == 0: scores[num] -= 6.0
 
-    # --- 排序與結果輸出 ---
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    # 排除上一期已開出的號碼
     final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
     
-    # 回傳前 3 名建議號碼
     return final_candidates[:3]
 
 def run_backtest(df, weights):
@@ -719,6 +705,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
