@@ -368,56 +368,56 @@ with tab3:
         )
 
         def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
-    import random
-    import pandas as pd
-    
-    ball_cols = [c for c in df.columns if str(c).isdigit()]
-    last_draw_row = df.iloc[0]
-    last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
-    
-    # --- 1. 初始化評分表 ---
-    scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
-
-    # --- 2. 維度一：連動響應 (加強即時權重) ---
-    for i in range(min(len(df)-1, 50)):
-        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-        next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-        if current_set.intersection(set(last_draw_nums)):
-            weight = 3.0 if i < 10 else 1.0 
-            for num in next_gen_nums:
-                if num in scores: scores[num] += weight
-
-    # --- 3. 維度二：鄰居觸發邏輯 ---
-    for num in last_draw_nums:
-        n_int = int(num)
-        neighbors = []
-        if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
-        if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
-        for nb in neighbors:
-            if nb in scores: scores[nb] += 2.5 
-
-    # --- 4. 維度三：遺漏節奏與區間 ---
-    for num, o in omissions.items():
-        if num in scores:
-            if o in [3, 5, 8]: scores[num] += 2.0
-            if o == 0: scores[num] -= 2.0 
-
-    zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
-    if zone_cols:
-        top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
-        try:
-            parts = str(top_zone_name).split('-')
-            for i in range(int(parts[0]), int(parts[1]) + 1):
-                n_str = str(i).zfill(2)
-                if n_str in scores: scores[n_str] += 1.0
-        except: pass
-
-    # --- 5. 排序候選 ---
-    scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
-
-    recs = sorted(final_candidates[:3])
-    return recs, scores
+            import random
+            import pandas as pd
+            
+            ball_cols = [c for c in df.columns if str(c).isdigit()]
+            last_draw_row = df.iloc[0]
+            last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
+            
+            # --- 1. 初始化評分表 ---
+            scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
+        
+            # --- 2. 維度一：連動響應 (加強即時權重) ---
+            for i in range(min(len(df)-1, 50)):
+                current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+                next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
+                if current_set.intersection(set(last_draw_nums)):
+                    weight = 3.0 if i < 10 else 1.0 
+                    for num in next_gen_nums:
+                        if num in scores: scores[num] += weight
+        
+            # --- 3. 維度二：鄰居觸發邏輯 ---
+            for num in last_draw_nums:
+                n_int = int(num)
+                neighbors = []
+                if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
+                if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
+                for nb in neighbors:
+                    if nb in scores: scores[nb] += 2.5 
+        
+            # --- 4. 維度三：遺漏節奏與區間 ---
+            for num, o in omissions.items():
+                if num in scores:
+                    if o in [3, 5, 8]: scores[num] += 2.0
+                    if o == 0: scores[num] -= 2.0 
+        
+            zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
+            if zone_cols:
+                top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
+                try:
+                    parts = str(top_zone_name).split('-')
+                    for i in range(int(parts[0]), int(parts[1]) + 1):
+                        n_str = str(i).zfill(2)
+                        if n_str in scores: scores[n_str] += 1.0
+                except: pass
+        
+            # --- 5. 排序候選 ---
+            scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
+        
+            recs = sorted(final_candidates[:3])
+            return recs, scores
 
 
         # UI 顯示
@@ -548,6 +548,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
