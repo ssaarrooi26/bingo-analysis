@@ -136,21 +136,16 @@ except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
     
-def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None):
+def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, enable_defense=False):
     import random
     import pandas as pd
     import streamlit as st
     
-    # --- 初始化權重字典 ---
+    # --- 權重初始化 ---
     if weights is None:
-        weights = {
-            'neighbor': 4.5,
-            'flow': 2.0,
-            'trend': 3.5,
-            'omit': 2.5
-        }
+        weights = {'neighbor': 4.5, 'flow': 2.0, 'trend': 3.5, 'omit': 2.5}
     
-    # 1. 初始化環境與 Session State
+    # 1. 初始化 Session State (僅在啟用防守模式時重要)
     if 'pick_history' not in st.session_state:
         st.session_state.pick_history = {}
         
@@ -161,76 +156,68 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None):
     # 初始化評分表
     scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
     
-    # --- 維度一：爆發力優先 (已導入即時權重) ---
+    # --- 維度一：鄰居與連動 (先前方案的核心) ---
+    # 鄰居加分：回歸「無差別加分」，找回補位感
     for num in last_draw_nums:
         n_int = int(num)
         for diff in [-1, 1]:
             nb = str(n_int + diff).zfill(2)
             if nb in scores:
-                # 鄰居觸發：放寬條件，所有鄰居皆有基礎加分以增加連號感
-                if omissions.get(nb, 99) in [1, 2, 3]:
-                    scores[nb] += weights['neighbor'] # [已改為即時權重]
-                else:
-                    # [新增] 非黃金期鄰居給予 60% 權重，確保鄰近號碼不被冷落
-                    scores[nb] += (weights['neighbor'] * 0.6) 
-                    
-    # --- 維度二：區間飽和度與能量回流 (已導入即時權重) ---
+                scores[nb] += weights['neighbor'] # 直接加分，不設遺漏期限制
+
+    # 連動響應：維持極短期與長期權重
+    for i in range(min(len(df)-1, 50)):
+        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+        if current_set.intersection(set(last_draw_nums)):
+            weight = weights['trend'] if i < 10 else 1.0
+            for num in [n for n in df.iloc[i].index if n in ball_cols]:
+                if num in scores: scores[num] += weight
+
+    # --- 維度二：遺漏節奏 ---
+    for num, o in omissions.items():
+        if num in scores:
+            if o in [3, 5, 8]: scores[num] += weights['omit']
+            if o == 0: scores[num] -= 2.0 # 輕微扣分，維持先前版本的適度冷卻
+
+    # --- 維度三：區間熱力 (防守模式開關) ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
     if zone_cols:
-        for z in zone_cols:
+        if not enable_defense:
+            # 【進攻模式】：追熱邏輯 (先前方案)
+            top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
             try:
+                start, end = map(int, str(top_zone_name).split('-'))
+                for i in range(start, end + 1):
+                    n_str = str(i).zfill(2)
+                    if n_str in scores: scores[n_str] += 1.5 
+            except: pass
+        else:
+            # 【防守模式】：過熱保護與能量回流 (目前方案)
+            for z in zone_cols:
                 start, end = map(int, z.split('-'))
                 count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
                 if count >= 4:
-                    for i in range(start, end + 1):
-                        scores[str(i).zfill(2)] -= 3.0 # 飽和扣分
+                    for i in range(start, end + 1): scores[str(i).zfill(2)] -= 3.0
                     adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
-                    if adj_low in scores: scores[adj_low] += weights['flow'] # [已改為即時權重]
-                    if adj_high in scores: scores[adj_high] += weights['flow'] # [已改為即時權重]
-            except:
-                continue
-                
-    # --- 維度三：短期連動與費氏節奏 (已導入即時權重) ---
-    for i in range(min(len(df)-1, 50)):
-        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-        next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-        if current_set.intersection(set(last_draw_nums)):
-            weight = weights['trend'] if i < 10 else 1.0 # [已改為即時權重]
-            for num in next_gen_nums:
-                if num in scores: scores[num] += weight
-                
-    for num, o in omissions.items():
-        if num in scores:
-            if o in [3, 5, 8, 13]: 
-                scores[num] += weights['omit'] # [已改為即時權重]
-            if o == 0: 
-                scores[num] -= 6.0 
+                    if adj_low in scores: scores[adj_low] += weights['flow']
+                    if adj_high in scores: scores[adj_high] += weights['flow']
 
-    # --- [新增] 連號集群激勵：找回先前版本的連號推薦感 ---
-    # 掃描 01-80，若相鄰兩球評分都 > 4.0，則額外給予連號獎勵
-    sorted_keys = sorted(scores.keys())
-    for i in range(len(sorted_keys) - 1):
-        n1, n2 = sorted_keys[i], sorted_keys[i+1]
-        if scores[n1] > 4.0 and scores[n2] > 4.0:
-            scores[n1] += 1.2 # 小幅加成，引導連號出現
-            scores[n2] += 1.2
+    # --- 維度四：權重衰減 (僅在防守模式啟用) ---
+    if enable_defense:
+        for num in scores:
+            decay_count = st.session_state.pick_history.get(num, 0)
+            if decay_count >= 3: scores[num] -= (decay_count * 2.0)
 
-    # --- 維度四：權重衰減機制 ---
-    for num in scores:
-        decay_count = st.session_state.pick_history.get(num, 0)
-        if decay_count >= 3:
-            scores[num] -= (decay_count * 2.0)
-            
-    # 3. 排序與更新歷史紀錄
+    # 3. 排序與輸出
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
     top_3 = final_candidates[:3]
     
-    for num in top_3:
-        st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
-    for num in list(st.session_state.pick_history.keys()):
-        if num not in top_3:
-            del st.session_state.pick_history[num]
+    # 僅在啟用防守時更新歷史紀錄
+    if enable_defense:
+        for num in top_3: st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
+        for num in list(st.session_state.pick_history.keys()):
+            if num not in top_3: del st.session_state.pick_history[num]
             
     return top_3, scores
 
@@ -385,14 +372,24 @@ existing_cols = [col for col in target_numbers if col in df.columns and col != '
 
 st.sidebar.divider() # 加入分隔線
 
-# 實戰建議權重控制
 st.sidebar.header("🎯 建議權重控制")
+
+# 1. 加入模式開關 (這會決定 smart_pick_3 跑進攻還是規避邏輯)
+is_defensive = st.sidebar.toggle("🛡️ 啟用風險規避模式", value=False)
+
+# 2. 定義滑桿
 sw_n = st.sidebar.slider("鄰居觸發", 1.0, 10.0, 4.5, key="real_n")
 sw_t = st.sidebar.slider("短期連動", 1.0, 10.0, 3.5, key="real_t")
 sw_f = st.sidebar.slider("能量回流", 0.0, 5.0, 2.0, key="real_f")
 sw_o = st.sidebar.slider("遺漏節奏", 1.0, 5.0, 2.5, key="real_o")
-# 組合成字典
-sidebar_weights = {'neighbor': sw_n, 'trend': sw_t, 'flow': sw_f, 'omit': sw_o}
+
+# 3. 組合成函數看得懂的字典 (這裡的 key 必須跟 smart_pick_3 內部一致)
+sidebar_weights = {
+    'neighbor': sw_n, 
+    'trend': sw_t, 
+    'flow': sw_f, 
+    'omit': sw_o
+}
 
 # 3. 功能分頁
 tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
@@ -600,8 +597,17 @@ with tab3:
 
         # UI 顯示
         # 呼叫更新後的函數
-        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights)
-        
+        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
+        # --- 新增：當前選號模式說明 ---
+        if not is_defensive:
+            st.subheader("🔥 當前模式：進攻型 ")
+            st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。適合連號頻出的強勢盤勢。")
+            st.markdown("---")
+        else:
+            st.subheader("🛡️ 當前模式：風險規避型)")
+            st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。適合號碼分佈散亂的盤勢。")
+            st.markdown("---")
+
         st.subheader("🎯 高精度交叉驗證選碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
@@ -713,6 +719,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
