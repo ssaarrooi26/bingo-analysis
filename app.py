@@ -135,6 +135,29 @@ try:
 except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
+
+# 遺漏期數統計
+def calculate_omission(df, target_numbers):
+    omission_dict = {}
+    
+    # 確保 df 是按期數從大到小排 (最新在最上面)
+    # 若你的 DataFrame 索引本身就是最新的在上面，此處排序可選擇性保留
+    df_sorted = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
+    
+    for num in target_numbers:
+        # 找到該號碼欄位中，第一個「不是空值」的索引位置
+        # 因為 df 已經重設索引且降序排，索引值剛好就代表遺漏期數
+        not_null_indices = df_sorted[df_sorted[num].notnull()].index
+        
+        if not not_null_indices.empty:
+            # 第一個出現的位置索引即為遺漏期數
+            # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
+            omission_dict[num] = int(not_null_indices[0])
+        else:
+            # 如果整張表都沒出現過，設為資料總長度
+            omission_dict[num] = len(df_sorted)
+            
+    return omission_dict
     
 def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, enable_defense=False):
     import random
@@ -491,28 +514,6 @@ with tab3:
 
     st.divider()
 
-    # 遺漏期數統計
-    def calculate_omission(df, target_numbers):
-        omission_dict = {}
-        
-        # 確保 df 是按期數從大到小排 (最新在最上面)
-        df_sorted = df.sort_values(by='期數', ascending=False)
-        
-        for num in target_numbers:
-            # 找到該號碼欄位中，第一個「不是空值」的索引位置
-            # 因為 df 已經降序排，索引值剛好就等於遺漏期數
-            not_null_indices = df_sorted[df_sorted[num].notnull()].index
-            
-            if not not_null_indices.empty:
-                # 第一個出現的位置索引即為遺漏期數
-                # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
-                omission_dict[num] = not_null_indices[0]
-            else:
-                # 如果整張表都沒出現過，設為資料總長度
-                omission_dict[num] = len(df_sorted)
-                
-        return omission_dict
-
     st.subheader("📊 號碼遺漏值統計 (Omission Analysis)")
     
     # 計算遺漏值
@@ -728,6 +729,7 @@ with tab4: # 第四個 Tab
                 st.info("💡 **權重優化建議**：\n"
                         "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
                         "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
