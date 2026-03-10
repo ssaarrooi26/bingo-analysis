@@ -518,52 +518,52 @@ with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測 (過去 50 期)")
 
     def run_backtest(df):
-    import pandas as pd
-    
-    # 回測參數
-    test_range = 50  # 測試過去 50 期
-    window = 5       # 驗證 5 期內是否命中
-    results = []
-    
-    # 取得球號欄位
-    ball_cols = [c for c in df.columns if str(c).isdigit()]
-    
-    # 開始回測（從較舊的期數往最新期數模擬）
-    # df.iloc[0] 是最新，所以我們從 test_range + window 的位置開始回溯
-    for i in range(window, test_range + window):
-        if i + 50 >= len(df): break # 確保有足夠歷史資料計算評分
+        import pandas as pd
         
-        # 模擬「那一期」的視角：切分當時的歷史資料
-        # current_df 是「當時」可見的歷史
-        current_df = df.iloc[i:] 
-        actual_future_5 = df.iloc[i-window:i] # 當時之後的實際 5 期結果
+        # 回測參數
+        test_range = 50  # 測試過去 50 期
+        window = 5       # 驗證 5 期內是否命中
+        results = []
         
-        # 1. 計算當時的遺漏值與區間統計 (這部分需呼叫你現有的計算函數)
-        # 假設你現有的函數名稱為 calculate_omissions 和 get_interval_stats
-        # omissions = calculate_omissions(current_df)
-        # interval_stats = get_interval_stats(current_df)
+        # 取得球號欄位
+        ball_cols = [c for c in df.columns if str(c).isdigit()]
         
-        # 2. 執行當時的智慧選號 (排除 session_state 影響)
-        # 我們稍微簡化 smart_pick_3 為回測專用版本，不存取 st.session_state
-        recs, _ = smart_pick_3_logic_only(current_df) 
-        
-        # 3. 驗證 5 期內命中次數
-        match_count = 0
-        future_nums = []
-        for _, row in actual_future_5.iterrows():
-            draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
-            future_nums.extend(draw)
-        
-        hit_nums = [n for n in recs if n in set(future_nums)]
-        results.append({
-            "期數": df.iloc[i].name,
-            "建議號碼": recs,
-            "命中數": len(hit_nums),
-            "命中號碼": hit_nums,
-            "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
-        })
-        
-    return pd.DataFrame(results)
+        # 開始回測（從較舊的期數往最新期數模擬）
+        # df.iloc[0] 是最新，所以我們從 test_range + window 的位置開始回溯
+        for i in range(window, test_range + window):
+            if i + 50 >= len(df): break # 確保有足夠歷史資料計算評分
+            
+            # 模擬「那一期」的視角：切分當時的歷史資料
+            # current_df 是「當時」可見的歷史
+            current_df = df.iloc[i:] 
+            actual_future_5 = df.iloc[i-window:i] # 當時之後的實際 5 期結果
+            
+            # 1. 計算當時的遺漏值與區間統計 (這部分需呼叫你現有的計算函數)
+            # 假設你現有的函數名稱為 calculate_omissions 和 get_interval_stats
+            # omissions = calculate_omissions(current_df)
+            # interval_stats = get_interval_stats(current_df)
+            
+            # 2. 執行當時的智慧選號 (排除 session_state 影響)
+            # 我們稍微簡化 smart_pick_3 為回測專用版本，不存取 st.session_state
+            recs, _ = smart_pick_3_logic_only(current_df) 
+            
+            # 3. 驗證 5 期內命中次數
+            match_count = 0
+            future_nums = []
+            for _, row in actual_future_5.iterrows():
+                draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
+                future_nums.extend(draw)
+            
+            hit_nums = [n for n in recs if n in set(future_nums)]
+            results.append({
+                "期數": df.iloc[i].name,
+                "建議號碼": recs,
+                "命中數": len(hit_nums),
+                "命中號碼": hit_nums,
+                "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
+            })
+            
+        return pd.DataFrame(results)
 
     if st.button("🚀 開始執行 50 期回測"):
         with st.spinner("系統正在模擬歷史選號並驗證結果..."):
@@ -588,6 +588,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
