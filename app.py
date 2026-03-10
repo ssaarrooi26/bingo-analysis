@@ -167,7 +167,7 @@ target_numbers = [str(i) for i in range(1, 81)]
 existing_cols = [col for col in target_numbers if col in df.columns and col != '期數']
 
 # 3. 功能分頁
-tab1, tab2, tab3 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議"])
+tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
 
 with tab1:
     st.header("1-80 號碼總出現頻率")
@@ -588,6 +588,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
