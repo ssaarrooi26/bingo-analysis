@@ -371,56 +371,55 @@ with tab3:
             import random
             import pandas as pd
             
-            # --- 1. 取得純球號欄位 ---
             ball_cols = [c for c in df.columns if str(c).isdigit()]
-            
-            # --- 2. 獲取上一期 (Index 0) 的開獎號碼 ---
             last_draw_nums = [n for n in df.iloc[0].index if n in ball_cols and df.iloc[0].notnull()[n]]
             
-            # --- 3. 分析歷史連動響應 (拖牌邏輯) ---
-            # 我們分析最近 100 期，找出上一期開出這些號碼後，下一期最常出現誰
-            linkage_counts = {}
-            sample_size = min(len(df) - 1, 100)
-            
+            # --- 1. 初始化評分表 (Scoring System) ---
+            # 給予 1-80 號每個號碼一個初始分數
+            scores = {str(i).zfill(2): 0 for i in range(1, 81)}
+        
+            # --- 2. 維度一：連動響應加分 (Linkage Weight) ---
+            # 分析近 50 期連動，強者恆強
+            sample_size = min(len(df) - 1, 50)
             for i in range(sample_size):
-                # 這一期的號碼 (作為基準)
                 current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-                # 下一期的號碼 (觀察響應)
                 next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-                
-                # 如果這一期包含了我們關注的號碼（這裡以最近一期為準）
                 if current_set.intersection(set(last_draw_nums)):
                     for num in next_gen_nums:
-                        linkage_counts[num] = linkage_counts.get(num, 0) + 1
+                        if num in scores: scores[num] += 1.5 # 連動響應權重最高
         
-            # 排序連動強度
-            sorted_linkage = sorted(linkage_counts.items(), key=lambda x: x[1], reverse=True)
-            # 排除掉上一期已經開過的 (避開剛開出的，抓即將響應的)
-            linkage_candidates = [n[0] for n in sorted_linkage if n[0] not in last_draw_nums]
+            # --- 3. 維度二：遺漏節奏加分 (Omission Rhythm) ---
+            # 針對遺漏值為 3, 5, 8, 13 (費波那契數列) 的號碼加分，這些是常見的轉折點
+            for num, o in omissions.items():
+                if num in scores:
+                    if o in [3, 5, 8]: scores[num] += 2.0  # 核心節奏點
+                    if o == 0: scores[num] -= 1.0 # 剛開出的扣分，避免追高失敗
         
-            # --- 4. 根據響應強度分配三碼 ---
-            
-            # A 碼：最強響應碼 (歷史連動次數最高)
-            candidate_a = linkage_candidates[0] if len(linkage_candidates) > 0 else "05"
-            
-            # B 碼：次強響應碼 (或是與 A 碼同尾數的響應號)
-            candidate_b = linkage_candidates[1] if len(linkage_candidates) > 1 else "15"
-            
-            # C 碼：鄰居連動碼 (取 A 碼的左右鄰居，增加叢集機會)
-            try:
-                a_int = int(candidate_a)
-                neighbor = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
-                candidate_c = neighbor
-            except:
-                candidate_c = linkage_candidates[2] if len(linkage_candidates) > 2 else "25"
+            # --- 4. 維度三：區間熱力加分 (Zone Momentum) ---
+            # 找出目前最熱門的區間，給予該區間內的號碼額外分數
+            top_zone_name = interval_stats.iloc[-1].idxmax() # 例如 '11-20'
+            start_num = int(top_zone_name.split('-')[0])
+            end_num = int(top_zone_name.split('-')[1])
+            for i in range(start_num, end_num + 1):
+                num_str = str(i).zfill(2)
+                if num_str in scores: scores[num_str] += 1.0
         
-            # --- 5. 最終去重與保底 ---
-            final_picks = list(set([candidate_a, candidate_b, candidate_c]))
-            while len(final_picks) < 3:
-                res = str(random.randint(1, 80)).zfill(2)
-                if res not in final_picks: final_picks.append(res)
+            # --- 5. 排序並過濾 ---
+            # 排除上一期已開出的，避免連莊失敗的風險（如果你想抓 5 期內的新值）
+            scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            return sorted(final_picks[:3])
+            # A 碼：權重最高者 (三維共振點)
+            candidate_a = final_candidates[0]
+            # B 碼：權重第二高者
+            candidate_b = final_candidates[1]
+            # C 碼：針對 A 碼進行鄰居補償 (如果 A 沒中，鄰居常會中)
+            a_int = int(candidate_a)
+            candidate_c = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
+            if candidate_c in last_draw_nums or candidate_c == candidate_b:
+                candidate_c = final_candidates[2]
+        
+            return sorted([candidate_a, candidate_b, candidate_c])
 
 
         # UI 顯示
@@ -453,6 +452,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
