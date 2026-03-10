@@ -136,6 +136,27 @@ except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
 
+def get_interval_stats(df):
+    """
+    計算區間熱力統計
+    """
+    intervals = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
+    stats = {intv: 0 for intv in intervals}
+    last_draw = df.iloc[0]
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    
+    for col in ball_cols:
+        val = last_draw[col]
+        if pd.notnull(val):
+            try:
+                num = int(val)
+                idx = (num - 1) // 10
+                if 0 <= idx < len(intervals):
+                    stats[intervals[idx]] += 1
+            except:
+                continue
+    return pd.DataFrame([stats])
+
 # 遺漏期數統計
 def calculate_omission(df, target_numbers=None):
     if target_numbers is None:
@@ -736,6 +757,7 @@ with tab4: # 第四個 Tab
                 st.info("💡 **權重優化建議**：\n"
                         "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
                         "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
