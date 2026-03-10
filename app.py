@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
+import itertools
 
 # 爬蟲測試函數
 def test_scraping():
@@ -390,50 +391,70 @@ def run_backtest(df, weights):
         
     return pd.DataFrame(results)
 
-import itertools
-
 def optimize_weights(df, base_weights):
     best_win_rate = -1
     best_weights = base_weights.copy()
     optimization_results = []
     
-    # 定義微調範圍：針對四個核心權重進行 +-0.1 的變動
-    # 為了效能，我們先針對最有潛力的兩個權重進行組合測試
-    adj_range = [-0.1, 0, 0.1]
+    # 1. 自動抓取權重字典中所有的 Key (不論中文或英文)
+    # 限制測試前 3 個權重，避免組合爆炸 (3^3 = 27 組，3^4 = 81 組)
+    all_keys = list(base_weights.keys())
+    target_keys = all_keys[:3] 
     
-    # 這裡我們挑選影響「集中度」最大的三個權重進行交叉測試
-    target_keys = ['neighbor_weight', 'energy_weight', 'interval_weight']
+    adj_range = [-0.1, 0, 0.1]
+    total_combinations = len(adj_range) ** len(target_keys)
     
     progress_bar = st.progress(0)
-    total_combinations = len(adj_range) ** len(target_keys)
+    status_text = st.empty()
     count = 0
     
-    st.write(f"正在測試 {total_combinations} 組權重組合...")
+    status_text.write(f"正在交叉測試 {total_combinations} 組權重組合 (優化目標: {', '.join(target_keys)})...")
 
+    # 2. 開始排列組合測試
     for adjs in itertools.product(adj_range, repeat=len(target_keys)):
         test_weights = base_weights.copy()
+        
         for i, key in enumerate(target_keys):
-            test_weights[key] = max(0, base_weights[key] + adjs[i])
+            # 自動計算並確保權重不小於 0
+            new_val = float(base_weights[key]) + adjs[i]
+            test_weights[key] = round(max(0.0, new_val), 2)
         
-        # 執行回測
-        res_df = run_backtest(df, test_weights)
-        win_rate = (res_df["是否成功(三星)"].sum() / len(res_df)) * 100
-        near_miss_rate = (res_df["最高單期命中"] == 2).sum()
-        
-        optimization_results.append({
-            "權重組合": str(adjs),
-            "三星率": win_rate,
-            "二星數": near_miss_rate,
-            "weights": test_weights
-        })
-        
-        if win_rate > best_win_rate:
-            best_win_rate = win_rate
-            best_weights = test_weights
+        # 3. 執行回測與統計
+        try:
+            res_df = run_backtest(df, test_weights)
+            
+            # 統計三星勝率與二星近彈數
+            win_rate = (res_df["是否成功(三星)"].sum() / len(res_df)) * 100
+            near_miss_rate = (res_df["最高單期命中"] == 2).sum()
+            
+            optimization_results.append({
+                "權重變動": str(adjs),
+                "三星率": win_rate,
+                "二星數": near_miss_rate,
+                "詳細配置": test_weights.copy()
+            })
+            
+            # 更新最優解
+            if win_rate > best_win_rate:
+                best_win_rate = win_rate
+                best_weights = test_weights.copy()
+            elif win_rate == best_win_rate:
+                # 如果三星率一樣，選二星數較高的組合
+                current_best_near = (pd.DataFrame(optimization_results)["二星數"].max() 
+                                     if optimization_results else 0)
+                if near_miss_rate > current_best_near:
+                    best_weights = test_weights.copy()
+
+        except Exception as e:
+            st.error(f"回測計算發生錯誤: {e}")
+            break
             
         count += 1
         progress_bar.progress(count / total_combinations)
         
+    status_text.success("尋優計算完成！")
+    progress_bar.empty()
+    
     return best_weights, optimization_results
 
 # 2. 側邊欄：設定參數
@@ -844,6 +865,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
