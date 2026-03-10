@@ -459,12 +459,10 @@ with tab3:
         top_tail = max(tail_data, key=tail_data.get)
         st.success(f"建議關注：{max_sec} 區間的號碼，並優先考慮「{top_tail}」尾的組合。")
 
-    else:
-        st.info("數據量不足，請至少輸入兩期資料以進行進階分析。")
+    
+        st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
-    st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
-
-st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+        st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
 
 
@@ -491,6 +489,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
