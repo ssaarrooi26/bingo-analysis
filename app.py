@@ -343,37 +343,40 @@ def run_backtest(df, weights):
     window = 5       
     results = []
     
-    # 1. 建立標準球號清單 (01-80) 以供後續比對與統計使用
-    # 確保這些欄位確實存在於 df 中
+    # 1. 建立標準球號清單
     ball_cols = [str(i).zfill(2) for i in range(1, 81) if str(i).zfill(2) in df.columns]
     
     for i in range(window, test_range + window):
         if i + 50 >= len(df): 
             break 
         
-        # 模擬當時的歷史：從第 i 期往後的資料
+        # 模擬當時的歷史 (i期之後)
         current_df = df.iloc[i:]  
-        # 之後的實際結果：第 i 期之前的 5 期 (i-5 到 i-1)
+        # 之後的實際結果 (i-5 到 i-1 期)
         actual_future_5 = df.iloc[i-window:i] 
         
-        # --- 關鍵修正：傳入正確的參數數量 ---
-        # 確保呼叫的名稱 (calculate_omissions) 與你定義的名稱一致
+        # 統計與選號
         omissions = calculate_omission(current_df, ball_cols) 
-        
-        # 確保 get_interval_stats 也能正常運作
         interval_stats = get_interval_stats(current_df)
-        
-        # 執行選號
         recs = smart_pick_3_backtest(current_df, omissions, interval_stats, weights)
+        recs_set = set(recs) # 轉 set 加速比對
         
-        # 驗證命中
-        future_nums = set()
+        # --- 核心邏輯修正：單期比對 ---
+        max_hits_in_5_draws = 0
+        hit_details = "" # 紀錄哪一期中了幾顆
+        
         for _, row in actual_future_5.iterrows():
-            # 取得該期所有開出的號碼並轉為 zfill(2) 格式
-            draw = [str(int(row[c])).zfill(2) for c in ball_cols if pd.notnull(row[c])]
-            future_nums.update(draw)
+            # 取得該單期的開獎號碼 (20顆)
+            current_draw = [str(int(row[c])).zfill(2) for c in ball_cols if pd.notnull(row[c])]
+            # 計算該單期中了幾顆
+            current_hits = len(recs_set.intersection(set(current_draw)))
+            
+            # 紀錄這 5 期中表現最好的一期
+            if current_hits > max_hits_in_5_draws:
+                max_hits_in_5_draws = current_hits
         
-        hit_nums = [n for n in recs if n in future_nums]
+        # 判定成功：必須有一期中滿 3 顆
+        is_success = 1 if max_hits_in_5_draws == 3 else 0
         
         # 安全取得期號
         draw_id = df.index[i] 
@@ -381,9 +384,8 @@ def run_backtest(df, weights):
         results.append({
             "期數": draw_id,
             "建議號碼": ", ".join(recs),
-            "命中數": len(hit_nums),
-            "命中號碼": ", ".join(hit_nums),
-            "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
+            "最高單期命中": max_hits_in_5_draws,
+            "是否成功(三星)": is_success
         })
         
     return pd.DataFrame(results)
@@ -726,7 +728,7 @@ with tab4: # 第四個 Tab
             else:
                 # 計算統計數據
                 total_tests = len(backtest_df)
-                success_tests = backtest_df["是否成功(1中以上)"].sum()
+                success_tests = backtest_df["是否成功(三星)"].sum()
                 # 避免除以 0 的安全檢查
                 win_rate = (success_tests / total_tests * 100) if total_tests > 0 else 0
                 
@@ -734,8 +736,8 @@ with tab4: # 第四個 Tab
                 st.subheader("🏁 回測總結報告")
                 c1, c2, c3 = st.columns(3)
                 c1.metric("回測總期數", f"{total_tests} 期")
-                c2.metric("成功獲中次數", f"{success_tests} 次")
-                c3.metric("預測勝率", f"{win_rate:.1f}%")
+                c2.metric("三星成功次數", f"{success_tests} 次")
+                c3.metric("三星總勝率", f"{win_rate:.2f}%")
                 
                 # 顯示詳細回測清單
                 st.write("### 📝 詳細回測紀錄")
@@ -757,6 +759,7 @@ with tab4: # 第四個 Tab
                 st.info("💡 **權重優化建議**：\n"
                         "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
                         "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
