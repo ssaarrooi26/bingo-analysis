@@ -372,46 +372,55 @@ with tab3:
             import pandas as pd
             
             ball_cols = [c for c in df.columns if str(c).isdigit()]
-            last_draw_nums = [n for n in df.iloc[0].index if n in ball_cols and df.iloc[0].notnull()[n]]
+            last_draw_row = df.iloc[0]
+            last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
             
             # --- 1. 初始化評分表 ---
             scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
         
-            # --- 2. 維度一：連動響應加分 (權重 1.5) ---
-            sample_size = min(len(df) - 1, 50)
-            for i in range(sample_size):
+            # --- 2. 維度一：連動響應 (加強即時權重) ---
+            # 分為「極短期(10期)」與「長期(50期)」
+            for i in range(min(len(df)-1, 50)):
                 current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
                 next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
                 if current_set.intersection(set(last_draw_nums)):
+                    weight = 3.0 if i < 10 else 1.0 # 越近期的連動權重越高
                     for num in next_gen_nums:
-                        if num in scores: scores[num] += 1.5
+                        if num in scores: scores[num] += weight
         
-            # --- 3. 維度二：遺漏節奏加分 (權重 2.0) ---
+            # --- 3. 維度二：鄰居觸發邏輯 (New! 縮短時差關鍵) ---
+            # 如果上一期開了 N，則 N-1 和 N+1 獲得「引爆加分」
+            for num in last_draw_nums:
+                n_int = int(num)
+                neighbors = []
+                if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
+                if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
+                for nb in neighbors:
+                    if nb in scores: scores[nb] += 2.5 # 給予強大的引爆權重
+        
+            # --- 4. 維度三：遺漏節奏與區間 (維持穩定) ---
             for num, o in omissions.items():
                 if num in scores:
                     if o in [3, 5, 8]: scores[num] += 2.0
-                    if o == 0: scores[num] -= 1.5  # 剛開出的加強扣分
+                    if o == 0: scores[num] -= 2.0 # 加重扣分，避免追剛開出的號碼
         
-            # --- 4. 維度三：區間熱力加分 (權重 1.0) ---
+            # 區間加熱... (維持原本的安全過濾版本)
             zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
             if zone_cols:
                 top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
                 try:
                     parts = str(top_zone_name).split('-')
-                    if len(parts) == 2:
-                        for i in range(int(parts[0]), int(parts[1]) + 1):
-                            n_str = str(i).zfill(2)
-                            if n_str in scores: scores[n_str] += 1.0
+                    for i in range(int(parts[0]), int(parts[1]) + 1):
+                        n_str = str(i).zfill(2)
+                        if n_str in scores: scores[n_str] += 1.0
                 except: pass
         
             # --- 5. 排序候選 ---
             scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            # 排除上一期已開出的，確保抓到的是「即將彈出」的號碼
             final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            # 選出前三強
             recs = sorted(final_candidates[:3])
-            
-            # 回傳建議號碼與完整的評分表
             return recs, scores
 
 
@@ -459,6 +468,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
