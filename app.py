@@ -421,7 +421,7 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
 
 # UI 顯示
 # 呼叫更新後的函數
-recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
+    recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
         
         st.subheader("🎯 高精度交叉驗證選碼")
         cols = st.columns(3)
@@ -520,6 +520,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
