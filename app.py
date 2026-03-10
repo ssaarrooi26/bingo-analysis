@@ -390,6 +390,52 @@ def run_backtest(df, weights):
         
     return pd.DataFrame(results)
 
+import itertools
+
+def optimize_weights(df, base_weights):
+    best_win_rate = -1
+    best_weights = base_weights.copy()
+    optimization_results = []
+    
+    # 定義微調範圍：針對四個核心權重進行 +-0.1 的變動
+    # 為了效能，我們先針對最有潛力的兩個權重進行組合測試
+    adj_range = [-0.1, 0, 0.1]
+    
+    # 這裡我們挑選影響「集中度」最大的三個權重進行交叉測試
+    target_keys = ['neighbor_weight', 'energy_weight', 'interval_weight']
+    
+    progress_bar = st.progress(0)
+    total_combinations = len(adj_range) ** len(target_keys)
+    count = 0
+    
+    st.write(f"正在測試 {total_combinations} 組權重組合...")
+
+    for adjs in itertools.product(adj_range, repeat=len(target_keys)):
+        test_weights = base_weights.copy()
+        for i, key in enumerate(target_keys):
+            test_weights[key] = max(0, base_weights[key] + adjs[i])
+        
+        # 執行回測
+        res_df = run_backtest(df, test_weights)
+        win_rate = (res_df["是否成功(三星)"].sum() / len(res_df)) * 100
+        near_miss_rate = (res_df["最高單期命中"] == 2).sum()
+        
+        optimization_results.append({
+            "權重組合": str(adjs),
+            "三星率": win_rate,
+            "二星數": near_miss_rate,
+            "weights": test_weights
+        })
+        
+        if win_rate > best_win_rate:
+            best_win_rate = win_rate
+            best_weights = test_weights
+            
+        count += 1
+        progress_bar.progress(count / total_combinations)
+        
+    return best_weights, optimization_results
+
 # 2. 側邊欄：設定參數
 st.sidebar.header("🚀 數據同步工具")
 if st.sidebar.button("🔄 抓取並同步至雲端"):
@@ -773,6 +819,31 @@ with tab4: # 第四個 Tab
                         "* **若連一星(黃色)都很少**：代表策略完全偏離，建議大幅調高「鄰居觸發」或「遺漏節奏」權重。\n"
                         "* **能量回流建議**：若命中號碼總是在開出後才出現在預測中，請提高「能量回流」權重。")
 
+    st.divider()
+    st.subheader("🧪 權重 AI 自動尋優")
+    st.write("系統將以目前設定為基準，自動測試 27 種微調組合，尋找三星勝率最高的設定。")
+    
+    if st.button("🔍 啟動自動尋優 (耗時約 30-60 秒)"):
+        with st.spinner("AI 正在瘋狂運算中..."):
+            best_w, all_res = optimize_weights(df, backtest_weights)
+            
+            # 轉成 DF 排序顯示
+            res_summary = pd.DataFrame(all_res).sort_values(by=["三星率", "二星數"], ascending=False)
+            
+            st.success(f"✅ 尋優完成！找到最佳三星率：{res_summary.iloc[0]['三星率']:.2f}%")
+            
+            # 顯示推薦的權重
+            st.write("### 🏆 推薦最佳權重配置：")
+            cols = st.columns(4)
+            cols[0].metric("鄰居權重", f"{best_w['neighbor_weight']:.2f}")
+            cols[1].metric("能量回流", f"{best_w['energy_weight']:.2f}")
+            cols[2].metric("區間熱力", f"{best_w['interval_weight']:.2f}")
+            cols[3].metric("遺漏節奏", f"{best_w['omission_weight']:.2f}")
+            
+            st.info("💡 你可以直接將這些數值填回左側的權重設定中，再次跑回測驗證。")
+            
+            with st.expander("查看所有測試組合數據"):
+                st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
 
 
 
