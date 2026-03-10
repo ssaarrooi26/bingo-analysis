@@ -337,7 +337,7 @@ def run_backtest(df, weights):
         
         # --- 關鍵修正：傳入正確的參數數量 ---
         # 確保呼叫的名稱 (calculate_omissions) 與你定義的名稱一致
-        omissions = calculate_omissions(current_df, ball_cols) 
+        omissions = calculate_omission(current_df, ball_cols) 
         
         # 確保 get_interval_stats 也能正常運作
         interval_stats = get_interval_stats(current_df)
@@ -736,6 +736,7 @@ with tab4: # 第四個 Tab
                 st.info("💡 **權重優化建議**：\n"
                         "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
                         "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
