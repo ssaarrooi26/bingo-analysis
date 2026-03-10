@@ -568,6 +568,17 @@ with tab4: # 第四個 Tab
     if st.button("🚀 開始執行 50 期回測"):
         with st.spinner("系統正在模擬歷史選號並驗證結果..."):
             backtest_df = run_backtest(df)
+
+            # --- 加入檢查機制 ---
+            if backtest_df.empty:
+                st.warning("回測未產生任何結果，請檢查數據源是否足夠（需大於 100 期）。")
+            elif "是否成功(1中以上)" not in backtest_df.columns:
+                st.error("回測資料表格式錯誤，請檢查欄位定義。")
+                st.write("目前的欄位有：", backtest_df.columns.tolist()) # 幫助除錯
+            else:
+                # 欄位確定存在才執行加總
+                total_tests = len(backtest_df)
+                success_tests = backtest_df["是否成功(1中以上)"].sum()
             
             # 計算統計數據
             total_tests = len(backtest_df)
@@ -588,6 +599,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
