@@ -405,18 +405,28 @@ with tab3:
                 if num_str in scores: scores[num_str] += 1.0
         
             # --- 5. 排序並過濾 ---
-            # 排除上一期已開出的，避免連莊失敗的風險（如果你想抓 5 期內的新值）
             scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            # 排除掉上一期已開出的
             final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            # A 碼：權重最高者 (三維共振點)
+            # 安全取值：如果候選名單不夠，用 01-80 補齊
+            while len(final_candidates) < 3:
+                backup = str(random.randint(1, 80)).zfill(2)
+                if backup not in final_candidates:
+                    final_candidates.append(backup)
+        
+            # A 碼 & B 碼
             candidate_a = final_candidates[0]
-            # B 碼：權重第二高者
             candidate_b = final_candidates[1]
-            # C 碼：針對 A 碼進行鄰居補償 (如果 A 沒中，鄰居常會中)
-            a_int = int(candidate_a)
-            candidate_c = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
-            if candidate_c in last_draw_nums or candidate_c == candidate_b:
+        
+            # C 碼：鄰居補償
+            try:
+                a_int = int(candidate_a)
+                candidate_c = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
+                # 如果 C 碼重複或已開出，取第三強的候選碼
+                if candidate_c in last_draw_nums or candidate_c == candidate_b or candidate_c == candidate_a:
+                    candidate_c = final_candidates[2]
+            except:
                 candidate_c = final_candidates[2]
         
             return sorted([candidate_a, candidate_b, candidate_c])
@@ -452,6 +462,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
