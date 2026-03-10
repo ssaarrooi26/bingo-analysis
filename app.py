@@ -367,57 +367,56 @@ with tab3:
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
 
-        def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
-            import random
-            import pandas as pd
-            
-            ball_cols = [c for c in df.columns if str(c).isdigit()]
-            last_draw_row = df.iloc[0]
-            last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
-            
-            # --- 1. 初始化評分表 ---
-            scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
-        
-            # --- 2. 維度一：連動響應 (加強即時權重) ---
-            for i in range(min(len(df)-1, 50)):
-                current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-                next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-                if current_set.intersection(set(last_draw_nums)):
-                    weight = 3.0 if i < 10 else 1.0 
-                    for num in next_gen_nums:
-                        if num in scores: scores[num] += weight
-        
-            # --- 3. 維度二：鄰居觸發邏輯 ---
-            for num in last_draw_nums:
-                n_int = int(num)
-                neighbors = []
-                if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
-                if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
-                for nb in neighbors:
-                    if nb in scores: scores[nb] += 2.5 
-        
-            # --- 4. 維度三：遺漏節奏與區間 ---
-            for num, o in omissions.items():
-                if num in scores:
-                    if o in [3, 5, 8]: scores[num] += 2.0
-                    if o == 0: scores[num] -= 2.0 
-        
-            zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
-            if zone_cols:
-                top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
-                try:
-                    parts = str(top_zone_name).split('-')
-                    for i in range(int(parts[0]), int(parts[1]) + 1):
-                        n_str = str(i).zfill(2)
-                        if n_str in scores: scores[n_str] += 1.0
-                except: pass
-        
-            # --- 5. 排序候選 ---
-            scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
-        
-            recs = sorted(final_candidates[:3])
-            return recs, scores
+def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
+    import random
+    import pandas as pd
+    
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    last_draw_row = df.iloc[0]
+    last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
+    
+    # --- 1. 初始化評分表 ---
+    scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
+
+    # --- 2. 維度一：連動響應 ---
+    for i in range(min(len(df)-1, 50)):
+        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+        next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
+        if current_set.intersection(set(last_draw_nums)):
+            weight = 3.0 if i < 10 else 1.0 
+            for num in next_gen_nums:
+                if num in scores: scores[num] += weight
+
+    # --- 3. 維度二：鄰居觸發邏輯 ---
+    for num in last_draw_nums:
+        n_int = int(num)
+        neighbors = []
+        if n_int > 1: neighbors.append(str(n_int - 1).zfill(2))
+        if n_int < 80: neighbors.append(str(n_int + 1).zfill(2))
+        for nb in neighbors:
+            if nb in scores: scores[nb] += 2.5 
+
+    # --- 4. 維度三：遺漏節奏與區間 ---
+    for num, o in omissions.items():
+        if num in scores:
+            if o in [3, 5, 8]: scores[num] += 2.0
+            if o == 0: scores[num] -= 2.0 
+
+    zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
+    if zone_cols:
+        top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
+        try:
+            parts = str(top_zone_name).split('-')
+            for i in range(int(parts[0]), int(parts[1]) + 1):
+                n_str = str(i).zfill(2)
+                if n_str in scores: scores[n_str] += 1.0
+        except: pass
+
+    scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
+
+    recs = sorted(final_candidates[:3])
+    return recs, scores        
 
 
         # UI 顯示
@@ -484,47 +483,36 @@ with tab3:
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
 
-    def run_backtest(df, calculate_omissions_func, get_interval_stats_func):
-        import pandas as pd
-        
-        test_range = 50  # 回測 50 期
-        window = 5       # 觀察之後 5 期
-        results = []
-        
-        ball_cols = [c for c in df.columns if str(c).isdigit()]
+def run_backtest(df, calculate_omissions_func, get_interval_stats_func):
+    import pandas as pd
+    test_range, window = 50, 5
+    results = []
     
-        for i in range(window, test_range + window):
-            if i + 100 >= len(df): break # 確保有足夠樣本計算統計量
-            
-            # 當時的歷史數據
-            history_df = df.iloc[i:]
-            # 當時之後的 5 期結果
-            future_5_df = df.iloc[i-window:i]
-            
-            # 計算當時的統計量 (需確保這兩個函數名稱與你 app.py 內一致)
-            omissions = calculate_omissions_func(history_df)
-            interval_stats = get_interval_stats_func(history_df)
-            
-            # 取得當時的建議號碼
-            recs, _ = smart_pick_3(history_df, omissions, interval_stats, history_df.index[0])
-            
-            # 檢查命中情況
-            future_nums = []
-            for _, row in future_5_df.iterrows():
-                draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
-                future_nums.extend(draw)
-            
-            hits = [n for n in recs if n in set(future_nums)]
-            
-            results.append({
-                "期數": df.index[i],
-                "建議": ", ".join(recs),
-                "命中": ", ".join(hits),
-                "命中數": len(hits),
-                "成功": 1 if len(hits) > 0 else 0
-            })
+    for i in range(window, test_range + window):
+        if i + 100 >= len(df): break
         
-        return pd.DataFrame(results)
+        history_df = df.iloc[i:]
+        future_5_df = df.iloc[i-window:i]
+        
+        omissions = calculate_omissions_func(history_df)
+        interval_stats = get_interval_stats_func(history_df)
+        
+        recs, _ = smart_pick_3(history_df, omissions, interval_stats, history_df.index[0])
+        
+        future_nums = []
+        for _, row in future_5_df.iterrows():
+            draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
+            future_nums.extend(draw)
+        
+        hits = [n for n in recs if n in set(future_nums)]
+        results.append({
+            "期數": df.index[i],
+            "建議": ", ".join(recs),
+            "命中": ", ".join(hits),
+            "命中數": len(hits),
+            "成功": 1 if len(hits) > 0 else 0
+        })
+    return pd.DataFrame(results)   
         
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測")
@@ -548,6 +536,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
