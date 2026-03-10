@@ -371,61 +371,70 @@ with tab3:
             import random
             import pandas as pd
             
+            # 取得純球號欄位
             ball_cols = [c for c in df.columns if str(c).isdigit()]
             last_draw_nums = [n for n in df.iloc[0].index if n in ball_cols and df.iloc[0].notnull()[n]]
             
-            # --- 1. 初始化評分表 (Scoring System) ---
-            # 給予 1-80 號每個號碼一個初始分數
+            # --- 1. 初始化評分表 ---
             scores = {str(i).zfill(2): 0 for i in range(1, 81)}
         
-            # --- 2. 維度一：連動響應加分 (Linkage Weight) ---
-            # 分析近 50 期連動，強者恆強
+            # --- 2. 維度一：連動響應加分 (權重 1.5) ---
             sample_size = min(len(df) - 1, 50)
             for i in range(sample_size):
                 current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
                 next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
                 if current_set.intersection(set(last_draw_nums)):
                     for num in next_gen_nums:
-                        if num in scores: scores[num] += 1.5 # 連動響應權重最高
+                        if num in scores: scores[num] += 1.5
         
-            # --- 3. 維度二：遺漏節奏加分 (Omission Rhythm) ---
-            # 針對遺漏值為 3, 5, 8, 13 (費波那契數列) 的號碼加分，這些是常見的轉折點
+            # --- 3. 維度二：遺漏節奏加分 (權重 2.0) ---
             for num, o in omissions.items():
                 if num in scores:
-                    if o in [3, 5, 8]: scores[num] += 2.0  # 核心節奏點
-                    if o == 0: scores[num] -= 1.0 # 剛開出的扣分，避免追高失敗
+                    if o in [3, 5, 8]: scores[num] += 2.0
+                    if o == 0: scores[num] -= 1.0
         
-            # --- 4. 維度三：區間熱力加分 (Zone Momentum) ---
-            # 找出目前最熱門的區間，給予該區間內的號碼額外分數
-            top_zone_name = interval_stats.iloc[-1].idxmax() # 例如 '11-20'
-            start_num = int(top_zone_name.split('-')[0])
-            end_num = int(top_zone_name.split('-')[1])
-            for i in range(start_num, end_num + 1):
-                num_str = str(i).zfill(2)
-                if num_str in scores: scores[num_str] += 1.0
+            # --- 4. 維度三：區間熱力加分 (修正後的安全版) ---
+            # 過濾出真正的區間欄位 (例如 "01-10", "11-20")
+            zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
+            
+            if zone_cols:
+                # 只在符合格式的區間中找出最大值
+                top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
+                try:
+                    parts = str(top_zone_name).split('-')
+                    if len(parts) == 2:
+                        start_num = int(parts[0])
+                        end_num = int(parts[1])
+                        for i in range(start_num, end_num + 1):
+                            n_str = str(i).zfill(2)
+                            if n_str in scores: scores[n_str] += 1.0
+                except:
+                    pass # 格式不合就跳過，不中斷程式
         
-            # --- 5. 排序並過濾 ---
+            # --- 5. 排序並過濾，確保 5 期內命中潛力 ---
             scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            # 排除掉上一期已開出的
+            # 排除上一期已出的號碼 (追求新開出的號碼)
             final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
         
-            # 安全取值：如果候選名單不夠，用 01-80 補齊
-            while len(final_candidates) < 3:
+            # 安全機制：確保至少有三個號碼
+            while len(final_candidates) < 5:
                 backup = str(random.randint(1, 80)).zfill(2)
                 if backup not in final_candidates:
                     final_candidates.append(backup)
         
-            # A 碼 & B 碼
+            # 最終選碼
             candidate_a = final_candidates[0]
             candidate_b = final_candidates[1]
-        
-            # C 碼：鄰居補償
+            
+            # C 碼採鄰居補償 (叢集效應)
             try:
                 a_int = int(candidate_a)
-                candidate_c = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
-                # 如果 C 碼重複或已開出，取第三強的候選碼
-                if candidate_c in last_draw_nums or candidate_c == candidate_b or candidate_c == candidate_a:
+                c_val = str(a_int + 1).zfill(2) if a_int < 80 else str(a_int - 1).zfill(2)
+                # 如果 C 碼不理想，取第三高分的候選
+                if c_val in last_draw_nums or c_val in [candidate_a, candidate_b]:
                     candidate_c = final_candidates[2]
+                else:
+                    candidate_c = c_val
             except:
                 candidate_c = final_candidates[2]
         
@@ -462,6 +471,7 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
 
 
 
