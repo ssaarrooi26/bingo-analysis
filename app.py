@@ -136,6 +136,215 @@ except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
 
+def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
+    import random
+    import pandas as pd
+    import streamlit as st
+    
+    # 1. 初始化環境與 Session State (用於權重衰減)
+    if 'pick_history' not in st.session_state:
+        st.session_state.pick_history = {} # 格式: {號碼: 連續出現次數}
+        
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    last_draw_row = df.iloc[0]
+    last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
+    
+    # 初始化評分表
+    scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
+    
+    # --- 維度一：鄰居觸發與爆發力優先 ---
+    for num in last_draw_nums:
+        n_int = int(num)
+        for diff in [-1, 1]:
+            nb = str(n_int + diff).zfill(2)
+            if nb in scores:
+                # 鄰居觸發 + 黃金回補期 (遺漏1-3期) = 爆發引爆分
+                if omissions.get(nb, 99) in [1, 2, 3]:
+                    scores[nb] += 4.5 
+                else:
+                    scores[nb] += 1.5
+                    
+    # --- 維度二：區間飽和度與能量回流 ---
+    zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
+    if zone_cols:
+        for z in zone_cols:
+            try:
+                start, end = map(int, z.split('-'))
+                # 統計該區間在上一期開出了幾顆球
+                count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
+                
+                if count >= 4: # 飽和門檻
+                    # 飽和區號碼扣分 (降溫)，避免能量稀釋
+                    for i in range(start, end + 1):
+                        scores[str(i).zfill(2)] -= 3.0
+                    # 能量回流：給予相鄰區間邊界碼加分
+                    adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
+                    if adj_low in scores: scores[adj_low] += 2.0
+                    if adj_high in scores: scores[adj_high] += 2.0
+            except:
+                continue
+                
+    # --- 維度三：短期連動與費氏節奏 ---
+    # A. 拖牌連動邏輯
+    for i in range(min(len(df)-1, 50)):
+        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+        next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
+        if current_set.intersection(set(last_draw_nums)):
+            weight = 3.5 if i < 10 else 1.0
+            for num in next_gen_nums:
+                if num in scores: scores[num] += weight
+                
+    # B. 遺漏週期篩選 (費氏數列節奏)
+    for num, o in omissions.items():
+        if num in scores:
+            if o in [3, 5, 8, 13]: 
+                scores[num] += 2.5
+            if o == 0: 
+                scores[num] -= 6.0 # 避開剛開出的號碼 (冷卻機制)
+                
+    # --- 維度四：權重衰減機制 (長期未中降溫) ---
+    for num in scores:
+        decay_count = st.session_state.pick_history.get(num, 0)
+        if decay_count >= 3: # 連續 3 期被推薦但未中，進入疲勞期
+            scores[num] -= (decay_count * 2.0)
+            
+    # 3. 排序與更新歷史紀錄
+    scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # 排除上一期已開出的號碼 (不連莊策略)
+    final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
+    
+    top_3 = final_candidates[:3]
+    
+    # --- 更新 Session State：維護推薦紀錄 ---
+    for num in top_3:
+        st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
+        
+    # 清除本次「沒被選中」號碼的連續推薦紀錄，斷開疲勞累積
+    for num in list(st.session_state.pick_history.keys()):
+        if num not in top_3:
+            del st.session_state.pick_history[num]
+            
+    return top_3, scores
+
+def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
+    """
+    回測專用選號邏輯：排除 Session State，支援外部權重傳入。
+    """
+    import pandas as pd
+    
+    # 提取權重參數 (若外部未傳入則使用預設值)
+    w_neighbor = weights.get('neighbor', 4.5)
+    w_flow = weights.get('flow', 2.0)
+    w_trend = weights.get('trend', 3.5)
+    w_omit = weights.get('omit', 2.5)
+
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    last_draw_row = df.iloc[0]
+    last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
+    
+    # 初始化評分表 (01-80)
+    scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
+
+    # --- 維度一：鄰居與爆發力 ---
+    for num in last_draw_nums:
+        n_int = int(num)
+        for diff in [-1, 1]:
+            nb = str(n_int + diff).zfill(2)
+            if nb in scores:
+                # 鄰居觸發 + 黃金回補期 (遺漏 1-3) = 爆發引爆分
+                if omissions.get(nb, 99) in [1, 2, 3]:
+                    scores[nb] += w_neighbor
+                else:
+                    scores[nb] += 1.5
+
+    # --- 維度二：區間飽和度與能量回流 (完整補回) ---
+    zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
+    if zone_cols:
+        for z in zone_cols:
+            try:
+                start, end = map(int, z.split('-'))
+                # 統計該區間在上一期開出的球數
+                count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
+                
+                if count >= 4: # 飽和門檻
+                    # 飽和區號碼扣分 (降溫)
+                    for i in range(start, end + 1):
+                        scores[str(i).zfill(2)] -= 3.0
+                    
+                    # 能量回流：給予相鄰區間邊界碼加分
+                    adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
+                    if adj_low in scores: scores[adj_low] += w_flow
+                    if adj_high in scores: scores[adj_high] += w_flow
+            except:
+                continue
+
+    # --- 維度三：短期連動與趨勢 ---
+    for i in range(min(len(df)-1, 50)):
+        # 取得歷史上的開獎組合
+        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+        # 取得該期隨後開出的號碼
+        next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
+        
+        # 如果當時的開獎與「最新一期」有重疊
+        if current_set.intersection(set(last_draw_nums)):
+            weight = w_trend if i < 10 else 1.0 # 近 10 期連動權重最高
+            for num in next_gen_nums:
+                if num in scores: scores[num] += weight
+
+    # --- 維度四：遺漏節奏 ---
+    for num, o in omissions.items():
+        if num in scores:
+            # 費氏數列節奏或關鍵遺漏值加分
+            if o in [3, 5, 8, 13]: 
+                scores[num] += w_omit
+            # 避開剛開出的號碼 (強制冷卻)
+            if o == 0: 
+                scores[num] -= 6.0
+
+    # --- 排序與結果輸出 ---
+    scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # 排除上一期已開出的號碼
+    final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
+    
+    # 回傳前 3 名建議號碼
+    return final_candidates[:3]
+
+def run_backtest(df, weights):
+    # 回測參數
+    test_range = 50 
+    window = 5       
+    results = []
+    
+    for i in range(window, test_range + window):
+        if i + 50 >= len(df): break 
+        
+        current_df = df.iloc[i:]  # 模擬當時的歷史
+        actual_future_5 = df.iloc[i-window:i] # 之後的實際結果
+        
+        # --- 呼叫你現有的統計函數 ---
+        # 請確保這些函數名稱與你 app.py 中定義的一致
+        omissions = calculate_omissions(current_df) 
+        interval_stats = get_interval_stats(current_df)
+        
+        # 執行回測專用選號
+        recs = smart_pick_3_backtest(current_df, omissions, interval_stats, weights)
+        
+        # 驗證命中
+        future_nums = []
+        for _, row in actual_future_5.iterrows():
+            draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
+            future_nums.extend(draw)
+        
+        hit_nums = [n for n in recs if n in set(future_nums)]
+        results.append({
+            "期數": df.iloc[i].name,
+            "建議號碼": ", ".join(recs),
+            "命中數": len(hit_nums),
+            "命中號碼": ", ".join(hit_nums),
+            "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
+        })
+    return pd.DataFrame(results)
+
 # 2. 側邊欄：設定參數
 st.sidebar.header("🚀 數據同步工具")
 if st.sidebar.button("🔄 抓取並同步至雲端"):
@@ -367,88 +576,7 @@ with tab3:
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
 
-        def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
-            import random
-            import pandas as pd
-            import streamlit as st
         
-            # 1. 初始化環境與 Session State (用於權重衰減)
-            if 'pick_history' not in st.session_state:
-                st.session_state.pick_history = {} # 格式: {號碼: 連續出現次數}
-        
-            ball_cols = [c for c in df.columns if str(c).isdigit()]
-            last_draw_row = df.iloc[0]
-            last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
-            
-            scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
-        
-            # --- 維度一：爆發力優先 (已納入) ---
-            for num in last_draw_nums:
-                n_int = int(num)
-                for diff in [-1, 1]:
-                    nb = str(n_int + diff).zfill(2)
-                    if nb in scores:
-                        # 鄰居觸發 + 黃金回補期 = 爆發引爆分
-                        if omissions.get(nb, 99) in [1, 2, 3]:
-                            scores[nb] += 4.5 
-                        else:
-                            scores[nb] += 1.5
-        
-            # --- 維度二：區間飽和度與能量回流 (新加入) ---
-            zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
-            if zone_cols:
-                # 計算上一期各區間開出球數
-                for z in zone_cols:
-                    try:
-                        start, end = map(int, z.split('-'))
-                        # 統計該區間在上一期開了幾顆
-                        count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
-                        
-                        if count >= 4: # 飽和門檻：該區間開出 4 顆以上
-                            # 飽和區號碼扣分 (避免能量稀釋)，並將能量轉移給相鄰區間
-                            for i in range(start, end + 1):
-                                scores[str(i).zfill(2)] -= 3.0
-                            # 能量回流：給予相鄰區間邊界碼加分 (範例：21-30過熱，則19,20,31,32加分)
-                            adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
-                            if adj_low in scores: scores[adj_low] += 2.0
-                            if adj_high in scores: scores[adj_high] += 2.0
-                    except: continue
-        
-            # --- 維度三：短期連動與費氏節奏 (強化) ---
-            for i in range(min(len(df)-1, 50)):
-                current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
-                next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
-                if current_set.intersection(set(last_draw_nums)):
-                    weight = 3.5 if i < 10 else 1.0
-                    for num in next_gen_nums:
-                        if num in scores: scores[num] += weight
-        
-            for num, o in omissions.items():
-                if num in scores:
-                    if o in [3, 5, 8, 13]: scores[num] += 2.5
-                    if o == 0: scores[num] -= 6.0 # 避開剛開出的值
-        
-            # --- 維度四：權重衰減機制 (新加入) ---
-            for num in scores:
-                decay_count = st.session_state.pick_history.get(num, 0)
-                if decay_count >= 3: # 連續 3 期被推薦但未中，進入疲勞期
-                    scores[num] -= (decay_count * 2.0) # 強制降溫
-        
-            # 3. 排序與更新歷史紀錄
-            scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
-            
-            top_3 = final_candidates[:3]
-        
-            # 更新 Session State: 記錄誰被推薦了
-            for num in top_3:
-                st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
-            # 清除沒被推薦號碼的紀錄 (代表斷開了連續推薦)
-            for num in list(st.session_state.pick_history.keys()):
-                if num not in top_3:
-                    del st.session_state.pick_history[num]
-        
-            return top_3, scores
 
 
         # UI 顯示
@@ -517,53 +645,19 @@ st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測 (過去 50 期)")
 
-    def run_backtest(df):
-        import pandas as pd
+    with st.expander("⚙️ 權重參數微調 (優化實驗室)"):
+        col_w1, col_w2 = st.columns(2)
+        w_neighbor = col_w1.slider("鄰居觸發權重", 1.0, 10.0, 4.5)
+        w_trend = col_w1.slider("短期連動權重", 1.0, 10.0, 3.5)
+        w_flow = col_w2.slider("能量回流權重", 0.0, 5.0, 2.0)
+        w_omit = col_w2.slider("遺漏節奏權重", 1.0, 5.0, 2.5)
         
-        # 回測參數
-        test_range = 50  # 測試過去 50 期
-        window = 5       # 驗證 5 期內是否命中
-        results = []
-        
-        # 取得球號欄位
-        ball_cols = [c for c in df.columns if str(c).isdigit()]
-        
-        # 開始回測（從較舊的期數往最新期數模擬）
-        # df.iloc[0] 是最新，所以我們從 test_range + window 的位置開始回溯
-        for i in range(window, test_range + window):
-            if i + 50 >= len(df): break # 確保有足夠歷史資料計算評分
-            
-            # 模擬「那一期」的視角：切分當時的歷史資料
-            # current_df 是「當時」可見的歷史
-            current_df = df.iloc[i:] 
-            actual_future_5 = df.iloc[i-window:i] # 當時之後的實際 5 期結果
-            
-            # 1. 計算當時的遺漏值與區間統計 (這部分需呼叫你現有的計算函數)
-            # 假設你現有的函數名稱為 calculate_omissions 和 get_interval_stats
-            # omissions = calculate_omissions(current_df)
-            # interval_stats = get_interval_stats(current_df)
-            
-            # 2. 執行當時的智慧選號 (排除 session_state 影響)
-            # 我們稍微簡化 smart_pick_3 為回測專用版本，不存取 st.session_state
-            recs, _ = smart_pick_3_logic_only(current_df) 
-            
-            # 3. 驗證 5 期內命中次數
-            match_count = 0
-            future_nums = []
-            for _, row in actual_future_5.iterrows():
-                draw = [str(n).zfill(2) for n in row if str(n).isdigit() and pd.notnull(n)]
-                future_nums.extend(draw)
-            
-            hit_nums = [n for n in recs if n in set(future_nums)]
-            results.append({
-                "期數": df.iloc[i].name,
-                "建議號碼": recs,
-                "命中數": len(hit_nums),
-                "命中號碼": hit_nums,
-                "是否成功(1中以上)": 1 if len(hit_nums) > 0 else 0
-            })
-            
-        return pd.DataFrame(results)
+        current_weights = {
+            'neighbor': w_neighbor,
+            'trend': w_trend,
+            'flow': w_flow,
+            'omit': w_omit
+        }
 
     if st.button("🚀 開始執行 50 期回測"):
         with st.spinner("系統正在模擬歷史選號並驗證結果..."):
@@ -599,6 +693,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
