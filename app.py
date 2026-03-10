@@ -419,50 +419,50 @@ with tab3:
         return recs, scores        
 
 
-        # UI 顯示
-        # 呼叫更新後的函數
-        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
+    # UI 顯示
+    # 呼叫更新後的函數
+    recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
         
-        st.subheader("🎯 高精度交叉驗證選碼")
+    st.subheader("🎯 高精度交叉驗證選碼")
         cols = st.columns(3)
         for i, num in enumerate(recommendations):
             cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {all_scores[num]}")
         
-        # --- 新增：顯示前 10 名的高分潛力股 ---
-        st.write("---")
-        st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
+    # --- 新增：顯示前 10 名的高分潛力股 ---
+    st.write("---")
+    st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
         
         # 將分數轉為 DataFrame 方便顯示
         score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
         score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
         
         # 使用 Streamlit 的 dataframe 顯示
-        st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+    st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
         
-        st.caption("註：加權總分綜合了「歷史拖牌連動」、「遺漏轉折週期」與「當前熱門區間」三大指標。")
+    st.caption("註：加權總分綜合了「歷史拖牌連動」、「遺漏轉折週期」與「當前熱門區間」三大指標。")
 
         
 
-        # --- 關鍵修正區塊 ---
-        # 這裡用 st.write 先測試，確保邏輯有跑進來
-        # remainder == 0 是指 5 的倍數 (例如期數 115)
-        # remainder == 4 是指 5 的倍數減 1 (例如期數 114)
-        if remainder == 0 or remainder == 4:
-            st.caption(f"🛡️ 目前期數 {latest_draw_id} (餘數 {remainder})：已啟動「循環末端避熱」機制。")
-        else:
-            st.caption(f"ℹ️ 目前期數 {latest_draw_id} (餘數 {remainder})：循環進行中，維持常規分析。")
-
-        # 綜合預測邏輯
-        st.divider()
-        st.subheader("🎲 綜合推薦組合")
-        # 這裡結合最旺區間 + 熱門尾數
-        top_tail = max(tail_data, key=tail_data.get)
-        st.success(f"建議關注：{max_sec} 區間的號碼，並優先考慮「{top_tail}」尾的組合。")
-
+    # --- 關鍵修正區塊 ---
+    # 這裡用 st.write 先測試，確保邏輯有跑進來
+    # remainder == 0 是指 5 的倍數 (例如期數 115)
+    # remainder == 4 是指 5 的倍數減 1 (例如期數 114)
+    if remainder == 0 or remainder == 4:
+                st.caption(f"🛡️ 目前期數 {latest_draw_id} (餘數 {remainder})：已啟動「循環末端避熱」機制。")
+            else:
+                st.caption(f"ℹ️ 目前期數 {latest_draw_id} (餘數 {remainder})：循環進行中，維持常規分析。")
+    # 綜合預測邏輯
+    st.divider()
+    st.subheader("🎲 綜合推薦組合")
+    # 這裡結合最旺區間 + 熱門尾數
+    top_tail = max(tail_data, key=tail_data.get)
+            
+    st.success(f"建議關注：{max_sec} 區間的號碼，並優先考慮「{top_tail}」尾的組合。")
     
-        st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
-
-        st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+        
+    st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
+    
+    st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
 
 
@@ -489,6 +489,7 @@ with tab4: # 第四個 Tab
             st.dataframe(backtest_df.style.highlight_between(left=1, right=3, subset=["成功"], color="#d4edda"), use_container_width=True)
         else:
             st.error("數據量不足，無法執行回測。")
+
 
 
 
