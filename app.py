@@ -136,10 +136,19 @@ except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
 
-def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
+def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None):
     import random
     import pandas as pd
     import streamlit as st
+    
+    # --- 初始化權重字典 (若未傳入則使用預設值) ---
+    if weights is None:
+        weights = {
+            'neighbor': 4.5,
+            'flow': 2.0,
+            'trend': 3.5,
+            'omit': 2.5
+        }
     
     # 1. 初始化環境與 Session State (用於權重衰減)
     if 'pick_history' not in st.session_state:
@@ -152,7 +161,7 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
     # 初始化評分表
     scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
     
-    # --- 維度一：鄰居觸發與爆發力優先 ---
+    # --- 維度一：爆發力優先 (已納入) ---
     for num in last_draw_nums:
         n_int = int(num)
         for diff in [-1, 1]:
@@ -160,37 +169,38 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
             if nb in scores:
                 # 鄰居觸發 + 黃金回補期 (遺漏1-3期) = 爆發引爆分
                 if omissions.get(nb, 99) in [1, 2, 3]:
-                    scores[nb] += 4.5 
+                    scores[nb] += weights['neighbor'] # [已改為即時權重]
                 else:
                     scores[nb] += 1.5
                     
-    # --- 維度二：區間飽和度與能量回流 ---
+    # --- 維度二：區間飽和度與能量回流 (新加入) ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
     if zone_cols:
+        # 計算上一期各區間開出球數
         for z in zone_cols:
             try:
                 start, end = map(int, z.split('-'))
-                # 統計該區間在上一期開出了幾顆球
+                # 統計該區間在上一期開了幾顆
                 count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
                 
-                if count >= 4: # 飽和門檻
-                    # 飽和區號碼扣分 (降溫)，避免能量稀釋
+                if count >= 4: # 飽和門檻：該區間開出 4 顆以上
+                    # 飽和區號碼扣分 (避免能量稀釋)，並將能量轉移給相鄰區間
                     for i in range(start, end + 1):
                         scores[str(i).zfill(2)] -= 3.0
-                    # 能量回流：給予相鄰區間邊界碼加分
+                    # 能量回流：給予相鄰區間邊界碼加分 (範例：21-30過熱，則19,20,31,32加分)
                     adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
-                    if adj_low in scores: scores[adj_low] += 2.0
-                    if adj_high in scores: scores[adj_high] += 2.0
+                    if adj_low in scores: scores[adj_low] += weights['flow'] # [已改為即時權重]
+                    if adj_high in scores: scores[adj_high] += weights['flow'] # [已改為即時權重]
             except:
                 continue
                 
-    # --- 維度三：短期連動與費氏節奏 ---
+    # --- 維度三：短期連動與費氏節奏 (強化) ---
     # A. 拖牌連動邏輯
     for i in range(min(len(df)-1, 50)):
         current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
         next_gen_nums = [n for n in df.iloc[i].index if n in ball_cols and df.iloc[i].notnull()[n]]
         if current_set.intersection(set(last_draw_nums)):
-            weight = 3.5 if i < 10 else 1.0
+            weight = weights['trend'] if i < 10 else 1.0 # [已改為即時權重]
             for num in next_gen_nums:
                 if num in scores: scores[num] += weight
                 
@@ -198,15 +208,15 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
     for num, o in omissions.items():
         if num in scores:
             if o in [3, 5, 8, 13]: 
-                scores[num] += 2.5
+                scores[num] += weights['omit'] # [已改為即時權重]
             if o == 0: 
-                scores[num] -= 6.0 # 避開剛開出的號碼 (冷卻機制)
+                scores[num] -= 6.0 # 避開剛開出的值
                 
-    # --- 維度四：權重衰減機制 (長期未中降溫) ---
+    # --- 維度四：權重衰減機制 (新加入) ---
     for num in scores:
         decay_count = st.session_state.pick_history.get(num, 0)
         if decay_count >= 3: # 連續 3 期被推薦但未中，進入疲勞期
-            scores[num] -= (decay_count * 2.0)
+            scores[num] -= (decay_count * 2.0) # 強制降溫
             
     # 3. 排序與更新歷史紀錄
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -215,11 +225,11 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id):
     
     top_3 = final_candidates[:3]
     
-    # --- 更新 Session State：維護推薦紀錄 ---
+    # 更新 Session State: 記錄誰被推薦了
     for num in top_3:
         st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
         
-    # 清除本次「沒被選中」號碼的連續推薦紀錄，斷開疲勞累積
+    # 清除沒被推薦號碼的紀錄 (代表斷開了連續推薦)
     for num in list(st.session_state.pick_history.keys()):
         if num not in top_3:
             del st.session_state.pick_history[num]
@@ -374,6 +384,17 @@ st.sidebar.header("設定選項")
 group_size = st.sidebar.slider("區間期數 (每幾期一組)", 1, 20, 5)
 target_numbers = [str(i) for i in range(1, 81)]
 existing_cols = [col for col in target_numbers if col in df.columns and col != '期數']
+
+st.sidebar.divider() # 加入分隔線
+
+# 實戰建議權重控制
+st.sidebar.header("🎯 建議權重控制")
+sw_n = st.sidebar.slider("鄰居觸發", 1.0, 10.0, 4.5, key="real_n")
+sw_t = st.sidebar.slider("短期連動", 1.0, 10.0, 3.5, key="real_t")
+sw_f = st.sidebar.slider("能量回流", 0.0, 5.0, 2.0, key="real_f")
+sw_o = st.sidebar.slider("遺漏節奏", 1.0, 5.0, 2.5, key="real_o")
+# 組合成字典
+sidebar_weights = {'neighbor': sw_n, 'trend': sw_t, 'flow': sw_f, 'omit': sw_o}
 
 # 3. 功能分頁
 tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
@@ -581,7 +602,7 @@ with tab3:
 
         # UI 顯示
         # 呼叫更新後的函數
-        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id)
+        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights)
         
         st.subheader("🎯 高精度交叉驗證選碼")
         cols = st.columns(3)
@@ -645,19 +666,20 @@ st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測 (過去 50 期)")
 
-    with st.expander("⚙️ 權重參數微調 (優化實驗室)"):
-        col_w1, col_w2 = st.columns(2)
-        w_neighbor = col_w1.slider("鄰居觸發權重", 1.0, 10.0, 4.5)
-        w_trend = col_w1.slider("短期連動權重", 1.0, 10.0, 3.5)
-        w_flow = col_w2.slider("能量回流權重", 0.0, 5.0, 2.0)
-        w_omit = col_w2.slider("遺漏節奏權重", 1.0, 5.0, 2.5)
-        
-        current_weights = {
-            'neighbor': w_neighbor,
-            'trend': w_trend,
-            'flow': w_flow,
-            'omit': w_omit
-        }
+    # --- 回測專用的局部權重控制 ---
+    st.info("💡 此處調整僅影響回測結果，不會改變 Tab 3 的建議號碼。")
+    with st.expander("⚙️ 模擬實驗室權重微調", expanded=False):
+        bw_n = st.slider("模擬-鄰居觸發", 1.0, 10.0, 4.5, key="back_n")
+        bw_t = st.slider("模擬-短期連動", 1.0, 10.0, 3.5, key="back_t")
+        bw_f = st.slider("模擬-能量回流", 0.0, 5.0, 2.0, key="back_f")
+        bw_o = st.slider("模擬-遺漏節奏", 1.0, 5.0, 2.5, key="back_o")
+
+    backtest_weights = {
+        'neighbor': bw_n, 
+        'trend': bw_t, 
+        'flow': bw_f, 
+        'omit': bw_o
+    }
 
     if st.button("🚀 開始執行 50 期回測"):
         with st.spinner("系統正在模擬歷史選號並驗證結果..."):
@@ -693,6 +715,7 @@ with tab4: # 第四個 Tab
             
             # 權重優化建議
             st.info("💡 **權重優化建議**：若勝率低於 60%，建議調高「鄰居觸發」權重；若命中號碼重疊度高但開出慢，建議調高「短期連動」權重。")
+
 
 
 
