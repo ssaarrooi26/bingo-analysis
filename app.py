@@ -715,63 +715,64 @@ with tab4: # 第四個 Tab
     }
 
     if st.button("🚀 開始執行 50 期回測"):
-    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
-        # 執行回測
-        backtest_df = run_backtest(df, backtest_weights)
+        with st.spinner("系統正在模擬歷史選號並驗證結果..."):
+            # 執行回測
+            backtest_df = run_backtest(df, backtest_weights)
+    
+            # --- 1. Bug 檢查機制 (保留並修正欄位名稱) ---
+            if backtest_df is None or backtest_df.empty:
+                st.warning("回測未產生任何結果，請檢查數據源是否足夠（需大於 100 期）。")
+            # 檢查新版欄位「是否成功(三星)」是否存在
+            elif "是否成功(三星)" not in backtest_df.columns:
+                st.error("回測資料表格式錯誤，請檢查欄位定義。")
+                st.write("目前的欄位有：", backtest_df.columns.tolist()) 
+            else:
+                # --- 2. 符合新統計定義的數據處理 ---
+                total_tests = len(backtest_df)
+                success_tests = backtest_df["是否成功(三星)"].sum()
+                # 統計「差一點就中」的期數 (單期中 2 顆)
+                near_misses = (backtest_df["最高單期命中"] == 2).sum()
+                
+                # 避免除以 0 的安全檢查
+                win_rate = (success_tests / total_tests * 100) if total_tests > 0 else 0
+                
+                # --- 3. 顯示儀表板 ---
+                st.subheader("🏁 單期三星回測報告")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("回測總期數", f"{total_tests} 期")
+                c2.metric("三星成功次數", f"{success_tests} 次")
+                c3.metric("三星總勝率", f"{win_rate:.2f}%")
+                
+                # 輔助提示
+                if near_misses > 0:
+                    st.write(f"💡 備註：在 50 期中，有 **{near_misses}** 期達到了「單期中 2 顆」，距離三星僅一步之遙！")
+                
+                # --- 4. 顯示詳細回測清單 (優化顏色邏輯) ---
+                st.write("### 📝 詳細回測紀錄")
+                
+                def highlight_stars(val):
+                    if val == 3: 
+                        return 'background-color: #ff4b4b; color: white; font-weight: bold' # 三星達成：鮮紅色
+                    if val == 2: 
+                        return 'background-color: #ffaa00; color: black; font-weight: bold' # 二星：橘色
+                    if val == 1: 
+                        return 'background-color: #fff3cd; color: black' # 一星：淡黃色
+                    return ''
+    
+                # 使用新欄位「最高單期命中」進行染色
+                st.dataframe(
+                    backtest_df.style.applymap(highlight_stars, subset=['最高單期命中']),
+                    use_container_width=True,
+                    height=400
+                )
+                
+                # --- 5. 權重優化建議 (根據三星邏輯調整語義) ---
+                st.divider()
+                st.info("💡 **權重優化建議**：\n"
+                        "* **若勝率為 0% 但二星(橘色)很多**：代表號碼抓取正確但集中度不足，建議微調「短期連動」或「區間熱力」。\n"
+                        "* **若連一星(黃色)都很少**：代表策略完全偏離，建議大幅調高「鄰居觸發」或「遺漏節奏」權重。\n"
+                        "* **能量回流建議**：若命中號碼總是在開出後才出現在預測中，請提高「能量回流」權重。")
 
-        # --- 1. Bug 檢查機制 (保留並修正欄位名稱) ---
-        if backtest_df is None or backtest_df.empty:
-            st.warning("回測未產生任何結果，請檢查數據源是否足夠（需大於 100 期）。")
-        # 檢查新版欄位「是否成功(三星)」是否存在
-        elif "是否成功(三星)" not in backtest_df.columns:
-            st.error("回測資料表格式錯誤，請檢查欄位定義。")
-            st.write("目前的欄位有：", backtest_df.columns.tolist()) 
-        else:
-            # --- 2. 符合新統計定義的數據處理 ---
-            total_tests = len(backtest_df)
-            success_tests = backtest_df["是否成功(三星)"].sum()
-            # 統計「差一點就中」的期數 (單期中 2 顆)
-            near_misses = (backtest_df["最高單期命中"] == 2).sum()
-            
-            # 避免除以 0 的安全檢查
-            win_rate = (success_tests / total_tests * 100) if total_tests > 0 else 0
-            
-            # --- 3. 顯示儀表板 ---
-            st.subheader("🏁 單期三星回測報告")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("回測總期數", f"{total_tests} 期")
-            c2.metric("三星成功次數", f"{success_tests} 次")
-            c3.metric("三星總勝率", f"{win_rate:.2f}%")
-            
-            # 輔助提示
-            if near_misses > 0:
-                st.write(f"💡 備註：在 50 期中，有 **{near_misses}** 期達到了「單期中 2 顆」，距離三星僅一步之遙！")
-            
-            # --- 4. 顯示詳細回測清單 (優化顏色邏輯) ---
-            st.write("### 📝 詳細回測紀錄")
-            
-            def highlight_stars(val):
-                if val == 3: 
-                    return 'background-color: #ff4b4b; color: white; font-weight: bold' # 三星達成：鮮紅色
-                if val == 2: 
-                    return 'background-color: #ffaa00; color: black; font-weight: bold' # 二星：橘色
-                if val == 1: 
-                    return 'background-color: #fff3cd; color: black' # 一星：淡黃色
-                return ''
-
-            # 使用新欄位「最高單期命中」進行染色
-            st.dataframe(
-                backtest_df.style.applymap(highlight_stars, subset=['最高單期命中']),
-                use_container_width=True,
-                height=400
-            )
-            
-            # --- 5. 權重優化建議 (根據三星邏輯調整語義) ---
-            st.divider()
-            st.info("💡 **權重優化建議**：\n"
-                    "* **若勝率為 0% 但二星(橘色)很多**：代表號碼抓取正確但集中度不足，建議微調「短期連動」或「區間熱力」。\n"
-                    "* **若連一星(黃色)都很少**：代表策略完全偏離，建議大幅調高「鄰居觸發」或「遺漏節奏」權重。\n"
-                    "* **能量回流建議**：若命中號碼總是在開出後才出現在預測中，請提高「能量回流」權重。")
 
 
 
