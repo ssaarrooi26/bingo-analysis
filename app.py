@@ -308,7 +308,7 @@ def run_backtest(df, weights):
         actual_future_5 = df.iloc[i-window:i] 
         
         # 呼叫統計函數
-        omissions = calculate_omissions(current_df) 
+        omissions = calculate_omission(current_df) 
         interval_stats = get_interval_stats(current_df)
         
         # 執行選號
@@ -728,6 +728,7 @@ with tab4: # 第四個 Tab
                 st.info("💡 **權重優化建議**：\n"
                         "* 若勝率低於 60%，建議調高「鄰居觸發」權重。\n"
                         "* 若命中號碼經常在開出後才出現，建議調高「能量回流」權重。")
+
 
 
 
