@@ -66,9 +66,6 @@ def fetch_full_table_from_web():
 
 # 新增寫入功能函數
 def update_multiple_to_gsheets(new_data_list):
-    """
-    new_data_list 是一個清單，內容為 [(draw_id, [numbers]), (draw_id, [numbers]), ...]
-    """
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -78,43 +75,52 @@ def update_multiple_to_gsheets(new_data_list):
         client = gspread.authorize(creds)
         sheet = client.open("數據分析_2026").sheet1
         
-        # 1. 取得雲端目前「所有」已存在的期數
-        # 使用 set 提高搜尋速度
-        existing_ids = set(str(x) for x in sheet.col_values(1))
+        # 抓取雲端現有期數，避免重複寫入
+	# 使用 set 提高搜尋速度
+        existing_ids = set(str(x).strip() for x in sheet.col_values(1) if x)
         
         rows_to_insert = []
-        # 將新資料由舊到新排序，確保插入後順序符合邏輯
-        new_data_list.sort(key=lambda x: x[0]) 
-
+        
+        # 先對本次抓到的所有新資料做「內部去重」
+        unique_batch = {}
         for draw_id, numbers in new_data_list:
-            str_id = str(draw_id)
-            # 關鍵防重：如果這期雲端已經有了，直接跳過
-            if str_id in existing_ids:
-                continue
+            unique_batch[str(draw_id).strip()] = numbers
             
-            # 對位邏輯
+        # 排序：由小到大排 (舊 -> 新)
+        # 這樣插入 index=2 時，最小的會先被塞入，最大的（最新）最後塞入，
+        # 最終在 Google Sheets 呈現的效果就是「最新在最上方」。
+        sorted_keys = sorted(unique_batch.keys(), key=lambda x: int(x))
+
+        for draw_id in sorted_keys:
+            if draw_id in existing_ids:
+                continue # 已存在則跳過
+            
+            # 對位邏輯：81欄矩陣
             row_data = [""] * 81
-            row_data[0] = str_id
-            for num_str in numbers:
-                if num_str.isdigit():
-                    num_int = int(num_str)
+            row_data[0] = draw_id
+            for n in unique_batch[draw_id]:
+                val = str(n).strip().lstrip('0')
+                if val.isdigit():
+                    num_int = int(val)
                     if 1 <= num_int <= 80:
-                        row_data[num_int] = num_str
+                        row_data[num_int] = n
             
             rows_to_insert.append(row_data)
-            # 同時加入 set 防止這批新資料裡有重複期數
-            existing_ids.add(str_id) 
+	    # 同時加入 set 防止這批新資料裡有重複期數
+            existing_ids.add(draw_id)
 
         if not rows_to_insert:
             return "ℹ️ 官網資料已存在於雲端，無須更新。"
 
-        # 2. 關鍵優化：批量插入 (使用 insert_rows，一次通訊解決所有新資料)
+	# 批量插入 (使用 insert_rows，一次通訊解決所有新資料)
         # index=2 代表插入在標題列下方
         # 修正後的批量插入：使用 index=2 確保相容性
+
+        # 4. 執行寫入 (插入在標題列 index=1 之後)
         try:
             sheet.insert_rows(rows_to_insert, index=2)
         except TypeError:
-            # 如果還是失敗，嘗試不帶參數名稱的寫法（部分舊版支援）
+	    # 如果還是失敗，嘗試不帶參數名稱的寫法（部分舊版支援）
             sheet.insert_rows(rows_to_insert, 2)
         
         return f"✅ 成功！已批量完成 {len(rows_to_insert)} 筆數據同步。"
@@ -911,6 +917,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
