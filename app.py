@@ -131,40 +131,51 @@ st.set_page_config(page_title="Bingo 分析大師", layout="wide")
 st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 
 # 讀取資料 (加上快取機制)
-# ttl=60 代表每 60 秒會自動檢查一次 Google 試算表有沒有新資料
-@st.cache_data(ttl=60)
+# ttl=5 代表每 5 秒會自動檢查一次 Google 試算表有沒有新資料
+@st.cache_data(ttl=5)  # 縮短快取時間，確保同步後能即時看見結果
 def load_data(url):
-    # 1. 讀取 Google Sheets 導出的 CSV (以字串讀取防止大數字變形)
-    df = pd.read_csv(url, dtype=str) 
+    # 1. 讀取 CSV
+    df_raw = pd.read_csv(url, dtype=str) 
 
-    if '期數' in df.columns:
-        # 2. 清理：移除期數為空或全空白的行
-        df = df.dropna(subset=['期數'])
-        df = df[df['期數'].str.strip() != ""]
+    if '期數' in df_raw.columns:
+        # 2. 移除空值與空白字串
+        df_raw = df_raw.dropna(subset=['期數'])
+        df_raw = df_raw[df_raw['期數'].astype(str).str.strip() != ""]
         
-        # 3. 轉換：先轉為數字以便正確排序（避免字串排序 100 < 2 的問題）
-        df['期數'] = pd.to_numeric(df['期數'], errors='coerce')
+        # 3. 轉換為數字（這是去重與排序的物理基礎）
+        df_raw['期數'] = pd.to_numeric(df_raw['期數'], errors='coerce')
+        df_raw = df_raw.dropna(subset=['期數'])
         
-        # 4. 去重：刪除重複期數，保留最新的一筆
-        df = df.drop_duplicates(subset=['期數'], keep='first')
+        # 4. 去重：依據期數刪除重複（如 115014242 重複問題）
+        df_raw = df_raw.drop_duplicates(subset=['期數'], keep='first')
         
-        # 5. 排序：強制大到小排序（最新期號在最上方）
-        df = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
+        # 5. 排序：大到小排（最新期號在最上面）
+        df_raw = df_raw.sort_values(by='期數', ascending=False).reset_index(drop=True)
         
-        # 6. 格式化：將期數轉回整數再轉字串 (修正 Name 'long' 錯誤)
-        # 先轉整數去除 .0，再轉字串供介面顯示
-        df['期數'] = df['pk_id'] = df['期數'].astype(int).astype(str)
+        # 6. 格式化：轉回整數再轉字串 (避免 115014242.0 這種顯示)
+        df_raw['期數'] = df_raw['期數'].astype(int).astype(str)
         
-    return df
+        return df_raw
+    else:
+        # 如果讀取的 CSV 根本沒有「期數」這欄，觸發異常
+        raise ValueError("CSV 格式錯誤：找不到『期數』欄位")
 
-# --- 執行讀取 ---
+# --- 執行讀取並實施中斷保護 ---
 try:
     df = load_data(SHEET_URL)
-    st.sidebar.write(f"📊 目前資料總量: {len(df)} 期")
-    st.success("✅ 數據已完成去重與排序同步")
+    
+    # 再次確認 df 不為 None 且不為空
+    if df is not None and not df.empty:
+        st.sidebar.success(f"✅ 同步成功！不重複數據：{len(df)} 期")
+        st.sidebar.write(f"最新期數：{df['期數'].iloc[0]}")
+    else:
+        st.error("⚠️ 雲端資料庫目前是空的。")
+        st.stop() # 沒資料就停止執行後續分析
+
 except Exception as e:
+    # 這裡放回 st.stop()，確保連線失敗時，後面的程式碼不會執行
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
-    st.stop()
+    st.stop() # 關鍵：徹底中斷，防止後續代碼報錯
 
 def get_interval_stats(df):
     """
@@ -899,6 +910,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
