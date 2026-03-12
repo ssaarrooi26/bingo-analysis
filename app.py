@@ -101,7 +101,12 @@ def update_multiple_to_gsheets(new_data_list):
 
         # 2. 關鍵優化：批量插入 (使用 insert_rows，一次通訊解決所有新資料)
         # index=2 代表插入在標題列下方
-        sheet.insert_rows(rows_to_insert, row_index=2)
+        # 修正後的批量插入：使用 index=2 確保相容性
+        try:
+            sheet.insert_rows(rows_to_insert, index=2)
+        except TypeError:
+            # 如果還是失敗，嘗試不帶參數名稱的寫法（部分舊版支援）
+            sheet.insert_rows(rows_to_insert, 2)
         
         return f"✅ 成功！已批量完成 {len(rows_to_insert)} 筆數據同步。"
         
@@ -872,6 +877,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
