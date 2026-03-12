@@ -133,38 +133,34 @@ st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 # 讀取資料 (加上快取機制)
 # ttl=60 代表每 60 秒會自動檢查一次 Google 試算表有沒有新資料
 @st.cache_data(ttl=60)
-@st.cache_data(ttl=60)
 def load_data(url):
-    # 1. 讀取 Google Sheets 導出的 CSV
-    # 建議加入 keep_default_na=False 避免號碼 0 號被誤判，並確保資料純淨
+    # 1. 讀取 Google Sheets 導出的 CSV (以字串讀取防止大數字變形)
     df = pd.read_csv(url, dtype=str) 
 
     if '期數' in df.columns:
-        # 2. 數據清洗：移除期數為空值的列
+        # 2. 清理：移除期數為空或全空白的行
         df = df.dropna(subset=['期數'])
+        df = df[df['期數'].str.strip() != ""]
         
-        # 3. 強制轉為數字進行精確排序
+        # 3. 轉換：先轉為數字以便正確排序（避免字串排序 100 < 2 的問題）
         df['期數'] = pd.to_numeric(df['期數'], errors='coerce')
         
-        # 4. 【關鍵】刪除重複期數
-        # 保留第一筆（最新插入的那筆），刪除後面重複的
+        # 4. 去重：刪除重複期數，保留最新的一筆
         df = df.drop_duplicates(subset=['期數'], keep='first')
         
-        # 5. 強制降序排列：讓最新期號永遠在最上方
+        # 5. 排序：強制大到小排序（最新期號在最上方）
         df = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
         
-        # 6. 格式美化：確保期數顯示為整數純文字，不帶小數點
-        # 避免 115014242 變成 115014242.0
-        df['期數'] = df['期數'].astype(long).astype(str)
+        # 6. 格式化：將期數轉回整數再轉字串 (修正 Name 'long' 錯誤)
+        # 先轉整數去除 .0，再轉字串供介面顯示
+        df['期數'] = df['pk_id'] = df['期數'].astype(int).astype(str)
         
     return df
 
-# --- 執行讀取與顯示 ---
+# --- 執行讀取 ---
 try:
     df = load_data(SHEET_URL)
-    # 顯示目前資料狀況，方便調試
     st.sidebar.write(f"📊 目前資料總量: {len(df)} 期")
-    st.sidebar.write(f"🆕 最新期數: {df['期數'].iloc[0] if not df.empty else '無'}")
     st.success("✅ 數據已完成去重與排序同步")
 except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
@@ -903,6 +899,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
