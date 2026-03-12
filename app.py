@@ -78,26 +78,35 @@ def update_multiple_to_gsheets(new_data_list):
         client = gspread.authorize(creds)
         sheet = client.open("數據分析_2026").sheet1
         
-        # 1. 一次性讀取現有期數，避免在迴圈中重複讀取
-        existing_ids = set(sheet.col_values(1))
+        # 1. 取得雲端目前「所有」已存在的期數
+        # 使用 set 提高搜尋速度
+        existing_ids = set(str(x) for x in sheet.col_values(1))
         
         rows_to_insert = []
-        for draw_id, numbers in sorted(new_data_list, key=lambda x: x[0]): # 按期數由舊到新排
-            if str(draw_id) in existing_ids:
+        # 將新資料由舊到新排序，確保插入後順序符合邏輯
+        new_data_list.sort(key=lambda x: x[0]) 
+
+        for draw_id, numbers in new_data_list:
+            str_id = str(draw_id)
+            # 關鍵防重：如果這期雲端已經有了，直接跳過
+            if str_id in existing_ids:
                 continue
             
-            # 繼承你優秀的對位邏輯
+            # 對位邏輯
             row_data = [""] * 81
-            row_data[0] = draw_id
+            row_data[0] = str_id
             for num_str in numbers:
-                num_int = int(num_str)
-                if 1 <= num_int <= 80:
-                    row_data[num_int] = num_str
+                if num_str.isdigit():
+                    num_int = int(num_str)
+                    if 1 <= num_int <= 80:
+                        row_data[num_int] = num_str
             
             rows_to_insert.append(row_data)
-        
+            # 同時加入 set 防止這批新資料裡有重複期數
+            existing_ids.add(str_id) 
+
         if not rows_to_insert:
-            return "ℹ️ 無新資料需要寫入。"
+            return "ℹ️ 官網資料已存在於雲端，無須更新。"
 
         # 2. 關鍵優化：批量插入 (使用 insert_rows，一次通訊解決所有新資料)
         # index=2 代表插入在標題列下方
@@ -124,22 +133,39 @@ st.title("📊 Bingo Bingo 號碼趨勢隨身版")
 # 讀取資料 (加上快取機制)
 # ttl=60 代表每 60 秒會自動檢查一次 Google 試算表有沒有新資料
 @st.cache_data(ttl=60)
+@st.cache_data(ttl=60)
 def load_data(url):
-    # Google Sheets 導出的 CSV 統一都是 utf-8，不需要擔心編碼問題
-    df = pd.read_csv(url)
+    # 1. 讀取 Google Sheets 導出的 CSV
+    # 建議加入 keep_default_na=False 避免號碼 0 號被誤判，並確保資料純淨
+    df = pd.read_csv(url, dtype=str) 
 
-#  確保「期數」這欄被視為數字（避免 100 排在 2 前面）
     if '期數' in df.columns:
+        # 2. 數據清洗：移除期數為空值的列
+        df = df.dropna(subset=['期數'])
+        
+        # 3. 強制轉為數字進行精確排序
         df['期數'] = pd.to_numeric(df['期數'], errors='coerce')
         
-        # 2. 強制降序排列：大期數（最新）排在最上面
-        # ascending=False 代表由大到小排
+        # 4. 【關鍵】刪除重複期數
+        # 保留第一筆（最新插入的那筆），刪除後面重複的
+        df = df.drop_duplicates(subset=['期數'], keep='first')
+        
+        # 5. 強制降序排列：讓最新期號永遠在最上方
         df = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
+        
+        # 6. 格式美化：確保期數顯示為整數純文字，不帶小數點
+        # 避免 115014242 變成 115014242.0
+        df['期數'] = df['期數'].astype(long).astype(str)
+        
     return df
 
+# --- 執行讀取與顯示 ---
 try:
     df = load_data(SHEET_URL)
-    st.success("✅ 數據已從雲端同步")
+    # 顯示目前資料狀況，方便調試
+    st.sidebar.write(f"📊 目前資料總量: {len(df)} 期")
+    st.sidebar.write(f"🆕 最新期數: {df['期數'].iloc[0] if not df.empty else '無'}")
+    st.success("✅ 數據已完成去重與排序同步")
 except Exception as e:
     st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
     st.stop()
@@ -877,6 +903,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
