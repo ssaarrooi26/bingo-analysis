@@ -67,41 +67,45 @@ def test_scraping():
         return None, f"程式發生錯誤: {str(e)}"
 
 # 新增寫入功能函數
-def update_to_gsheets(draw_id, numbers):
+def update_multiple_to_gsheets(new_data_list):
+    """
+    new_data_list 是一個清單，內容為 [(draw_id, [numbers]), (draw_id, [numbers]), ...]
+    """
     try:
         import gspread
         from google.oauth2.service_account import Credentials
         
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        # 從 Streamlit Secrets 讀取 (請確保雲端後台已設定)
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
-        
-        # 請確保這裡的名稱與你的 Google Sheet 檔案名稱完全一致，永遠抓最左邊的第一個分頁
         sheet = client.open("數據分析_2026").sheet1
         
-        # 檢查期數是否已存在
-        existing_ids = sheet.col_values(1)
-        if str(draw_id) in existing_ids:
-            return f"ℹ️ 期數 {draw_id} 已存在，無需重複寫入。"
+        # 1. 一次性讀取現有期數，避免在迴圈中重複讀取
+        existing_ids = set(sheet.col_values(1))
         
-        # 建立對位資料行
-        # 建立一個包含 81 個欄位的列表，初始值全部為空字串 ""
-        # index 0 是期數，index 1~80 對應號碼 1~80
-        row_data = [""] * 81
-        row_data[0] = draw_id  # 第一欄放入期數
+        rows_to_insert = []
+        for draw_id, numbers in sorted(new_data_list, key=lambda x: x[0]): # 按期數由舊到新排
+            if str(draw_id) in existing_ids:
+                continue
+            
+            # 繼承你優秀的對位邏輯
+            row_data = [""] * 81
+            row_data[0] = draw_id
+            for num_str in numbers:
+                num_int = int(num_str)
+                if 1 <= num_int <= 80:
+                    row_data[num_int] = num_str
+            
+            rows_to_insert.append(row_data)
         
-        for num_str in numbers:
-            num_int = int(num_str) # 轉成整數，例如 "05" -> 5
-            if 1 <= num_int <= 80:
-                # 關鍵：號碼是幾號，就填在第幾欄 (例如 5 號填在 index 5)
-                # 這樣在 Google Sheets 裡，5 號就會剛好在 E 欄 (第 5 欄) 下方
-                row_data[num_int] = num_str 
+        if not rows_to_insert:
+            return "ℹ️ 無新資料需要寫入。"
+
+        # 2. 關鍵優化：批量插入 (使用 insert_rows，一次通訊解決所有新資料)
+        # index=2 代表插入在標題列下方
+        sheet.insert_rows(rows_to_insert, row_index=2)
         
-        # 3. 插入到試算表第二列
-        sheet.insert_row(row_data, index=2)
-        
-        return f"✅ 成功！期數 {draw_id} 已完成號碼對位寫入。"
+        return f"✅ 成功！已批量完成 {len(rows_to_insert)} 筆數據同步。"
         
     except Exception as e:
         return f"❌ 寫入失敗: {str(e)}"
@@ -459,26 +463,31 @@ def optimize_weights(df, base_weights):
 
 # 2. 側邊欄：設定參數
 st.sidebar.header("🚀 數據同步工具")
-if st.sidebar.button("🔄 抓取並同步至雲端"):
+if st.sidebar.button("🔄 批量同步至雲端"):
     with st.sidebar:
         with st.spinner("正在執行自動化流程..."):
-            # A. 先抓取
-            draw_id, result = test_scraping()
+            # A. 抓取官網表格 (回傳 DataFrame, index=期數)
+            web_df = fetch_full_table_from_web()
             
-            if draw_id and len(result) == 20:
-                st.info(f"🔍 偵測到官網期數：{draw_id}")
+            if web_df is not None and not web_df.empty:
+                # 準備要交給 Google Sheets 的格式：[(期數, [號碼列表])]
+                sync_list = []
+                for draw_id, row in web_df.iterrows():
+                    # 將該列所有數值轉為字串並放入列表
+                    numbers = [str(n) for n in row.values]
+                    sync_list.append((str(draw_id), numbers))
                 
-                # B. 執行寫入
-                write_msg = update_to_gsheets(draw_id, result)
+                # B. 呼叫批量寫入函數
+                write_msg = update_multiple_to_gsheets(sync_list)
                 st.write(write_msg)
                 
-                # C. 如果寫入成功，強制清除快取讓畫面更新
+                # C. 成功後的刷新機制
                 if "成功" in write_msg:
                     st.cache_data.clear()
-                    st.success("數據已刷新，請查看下方報表")
-                    # st.rerun() # 如果想讓畫面立即跳動可加上這行
+                    st.success("數據已刷新，請查看報表")
+                    st.rerun()
             else:
-                st.error(f"抓取異常：{result}")
+                st.error("❌ 無法取得官網資料，請檢查網路連線")
 
 st.sidebar.divider() # 加入分隔線，區分自動化與原本的設定
 
@@ -865,6 +874,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
