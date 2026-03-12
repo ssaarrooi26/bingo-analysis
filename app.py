@@ -142,40 +142,41 @@ def load_data(url):
         df_raw = df_raw.dropna(subset=['期數'])
         df_raw = df_raw[df_raw['期數'].astype(str).str.strip() != ""]
         
-        # 3. 轉換為數字（這是去重與排序的物理基礎）
+        # 3. 轉換為數字（這是去重與排序的基礎）
         df_raw['期數'] = pd.to_numeric(df_raw['期數'], errors='coerce')
         df_raw = df_raw.dropna(subset=['期數'])
         
-        # 4. 去重：依據期數刪除重複（如 115014242 重複問題）
+        # 4. 去重：刪除重複期號（保留第一筆看到的）
         df_raw = df_raw.drop_duplicates(subset=['期數'], keep='first')
         
-        # 5. 排序：大到小排（最新期號在最上面）
-        df_raw = df_raw.sort_values(by='期數', ascending=False).reset_index(drop=True)
+        # 5. 【關鍵修改】排序：由小到大排（舊 -> 新）
+        # ascending=True 會讓最小（最舊）的期號排在第一筆
+        df_raw = df_raw.sort_values(by='期數', ascending=True).reset_index(drop=True)
         
-        # 6. 格式化：轉回整數再轉字串 (避免 115014242.0 這種顯示)
-        df_raw['期數'] = df_raw['期數'].astype(int).astype(str)
+        # 6. 格式化：轉回整數再轉字串 (避免 115014242.0 顯示)
+        df_raw['期數'] = df_raw['pk_id'] = df_raw['期數'].astype(int).astype(str)
         
         return df_raw
     else:
-        # 如果讀取的 CSV 根本沒有「期數」這欄，觸發異常
         raise ValueError("CSV 格式錯誤：找不到『期數』欄位")
 
 # --- 執行讀取並實施中斷保護 ---
 try:
     df = load_data(SHEET_URL)
     
-    # 再次確認 df 不為 None 且不為空
     if df is not None and not df.empty:
-        st.sidebar.success(f"✅ 同步成功！不重複數據：{len(df)} 期")
-        st.sidebar.write(f"最新期數：{df['期數'].iloc[0]}")
+        st.sidebar.success(f"✅ 同步成功！共 {len(df)} 期")
+        
+        # 修正顯示邏輯：第一筆是最舊，最後一筆是最新
+        st.sidebar.write(f"📅 最舊期數 (首筆)：{df['期數'].iloc[0]}")
+        st.sidebar.write(f"🚀 最新期數 (末筆)：{df['期數'].iloc[-1]}")
     else:
         st.error("⚠️ 雲端資料庫目前是空的。")
-        st.stop() # 沒資料就停止執行後續分析
+        st.stop() 
 
 except Exception as e:
-    # 這裡放回 st.stop()，確保連線失敗時，後面的程式碼不會執行
-    st.error(f"❌ 讀取失敗，請檢查網址或共用設定：{e}")
-    st.stop() # 關鍵：徹底中斷，防止後續代碼報錯
+    st.error(f"❌ 讀取失敗：{e}")
+    st.stop()
 
 def get_interval_stats(df):
     """
@@ -910,6 +911,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
