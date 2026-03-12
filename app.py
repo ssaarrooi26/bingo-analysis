@@ -10,61 +10,46 @@ from google.oauth2.service_account import Credentials
 import itertools
 
 # 爬蟲測試函數
-def test_scraping():
-    url = "https://lotto.auzo.tw/RK.php"
+def fetch_full_table_from_web():
+    url = "https://www.taiwanlottery.com.tw/lotto/bingobingo/drawingresult.aspx"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
         response = requests.get(url, headers=headers, timeout=10)
         response.encoding = 'utf-8'
-        
-        if response.status_code != 200:
-            return None, f"連線失敗，代碼：{response.status_code}"
-            
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 改用更寬鬆的方式尋找含有數據的表格
         tables = soup.find_all('table')
-        if not tables:
-            return None, "找不到任何表格 (Table)"
-
-        # 遍歷表格尋找含有「期數」字眼的列
-        target_row = None
+        all_draws = []
+        
         for table in tables:
             rows = table.find_all('tr')
             for row in rows:
                 cells = row.find_all(['td', 'th'])
-                if len(cells) > 5:  # Bingo Bingo 至少有 20 碼 + 期數，欄位一定很多
-                    # 排除掉標題列 (如果第一格內容是"期數"二字就跳過)
-                    first_cell = cells[0].get_text(strip=True)
-                    if "期" in first_cell or first_cell.isdigit():
-                        if first_cell.isdigit(): # 找到真正的數字期數了
-                            target_row = cells
-                            break
-            if target_row: break
-
-        if not target_row:
-            return None, "無法定位到有效的開獎資料列"
-
-        # 提取資料
-        draw_id = target_row[0].get_text(strip=True)
+                if len(cells) < 10: continue
+                
+                first_cell = cells[0].get_text(strip=True)
+                if not first_cell.isdigit(): continue
+                
+                draw_id = first_cell
+                numbers = []
+                for cell in cells[1:]:
+                    val = cell.get_text(strip=True).lstrip('0')
+                    if val.isdigit() and 1 <= int(val) <= 80:
+                        numbers.append(val.zfill(2))
+                
+                if len(numbers) >= 20:
+                    all_draws.append([draw_id] + numbers[:20])
         
-        # 提取所有數字並過濾 1-80
-        numbers = []
-        for cell in target_row:
-            val = cell.get_text(strip=True).lstrip('0')
-            if val.isdigit() and 1 <= int(val) <= 80:
-                # 補回 0 (例如 5 變 05) 保持格式統一
-                numbers.append(val.zfill(2))
+        if not all_draws: return None
 
-        if len(numbers) < 20:
-            return None, f"抓取號碼不足 (僅抓到 {len(numbers)} 碼)"
-
-        return draw_id, numbers[:20]
-
+        new_df = pd.DataFrame(all_draws)
+        # 這裡的欄位數量要與你寫入時對應 (20個號碼欄位)
+        new_df.columns = ['期數'] + [f'num_{i}' for i in range(1, 21)]
+        return new_df.set_index('期數')
     except Exception as e:
-        return None, f"程式發生錯誤: {str(e)}"
+        st.error(f"爬蟲執行出錯: {e}")
+        return None
 
 # 新增寫入功能函數
 def update_multiple_to_gsheets(new_data_list):
@@ -874,6 +859,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
