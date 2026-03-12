@@ -11,14 +11,22 @@ import itertools
 
 # 爬蟲測試函數
 def fetch_full_table_from_web():
-    url = "https://www.taiwanlottery.com.tw/lotto/bingobingo/drawingresult.aspx"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    # 改用第三方資料源，避免海外 IP 被台彩官網封鎖
+    url = "https://lotto.auzo.tw/RK.php" 
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        # 增加 timeout 到 15 秒，並捕獲錯誤
+        response = requests.get(url, headers=headers, timeout=15)
         response.encoding = 'utf-8'
-        soup = BeautifulSoup(response.text, 'html.parser')
         
+        if response.status_code != 200:
+            st.error(f"連線失敗，狀態碼：{response.status_code}")
+            return None
+            
+        soup = BeautifulSoup(response.text, 'html.parser')
         tables = soup.find_all('table')
         all_draws = []
         
@@ -28,6 +36,7 @@ def fetch_full_table_from_web():
                 cells = row.find_all(['td', 'th'])
                 if len(cells) < 10: continue
                 
+                # 這裡沿用你的「特徵掃描」邏輯，非常安全
                 first_cell = cells[0].get_text(strip=True)
                 if not first_cell.isdigit(): continue
                 
@@ -41,15 +50,19 @@ def fetch_full_table_from_web():
                 if len(numbers) >= 20:
                     all_draws.append([draw_id] + numbers[:20])
         
-        if not all_draws: return None
+        if not all_draws:
+            st.warning("抓取成功但未發現符合格式的資料列")
+            return None
 
         new_df = pd.DataFrame(all_draws)
-        # 這裡的欄位數量要與你寫入時對應 (20個號碼欄位)
         new_df.columns = ['期數'] + [f'num_{i}' for i in range(1, 21)]
         return new_df.set_index('期數')
+
+    except requests.exceptions.Timeout:
+        st.error("⌛ 連線逾時：第三方伺服器回應太慢，請稍後再試。")
     except Exception as e:
-        st.error(f"爬蟲執行出錯: {e}")
-        return None
+        st.error(f"❌ 爬蟲執行出錯: {e}")
+    return None
 
 # 新增寫入功能函數
 def update_multiple_to_gsheets(new_data_list):
@@ -859,6 +872,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
