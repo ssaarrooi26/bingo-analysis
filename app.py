@@ -86,10 +86,10 @@ def update_multiple_to_gsheets(new_data_list):
         for draw_id, numbers in new_data_list:
             unique_batch[str(draw_id).strip()] = numbers
             
-        # 排序：由小到大排 (舊 -> 新)
+        # 排序：由大到小排 (新 -> 舊)
         # 這樣插入 index=2 時，最小的會先被塞入，最大的（最新）最後塞入，
-        # 最終在 Google Sheets 呈現的效果就是「最新在最上方」。
-        sorted_keys = sorted(unique_batch.keys(), key=lambda x: int(x))
+        # reverse=True 讓最大的期號排在列表的第一個
+        sorted_keys = sorted(unique_batch.keys(), key=lambda x: int(x), reverse=True)
 
         for draw_id in sorted_keys:
             if draw_id in existing_ids:
@@ -917,6 +917,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
