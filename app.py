@@ -543,16 +543,43 @@ st.sidebar.divider() # 加入分隔線
 
 st.sidebar.header("🎯 建議權重控制")
 
-# 1. 加入模式開關 (這會決定 smart_pick_3 跑進攻還是規避邏輯)
+# 1. 定義預設值常量 (方便統一修改)
+DEFAULT_WEIGHTS = {
+    'neighbor': 4.5,
+    'trend': 3.5,
+    'flow': 2.0,
+    'omit': 2.5
+}
+
+# 2. 模式開關
 is_defensive = st.sidebar.toggle("🛡️ 啟用風險規避模式", value=False)
 
-# 2. 定義滑桿
-sw_n = st.sidebar.slider("鄰居觸發", 1.0, 10.0, 4.5, key="real_n")
-sw_t = st.sidebar.slider("短期連動", 1.0, 10.0, 3.5, key="real_t")
-sw_f = st.sidebar.slider("能量回流", 0.0, 5.0, 2.0, key="real_f")
-sw_o = st.sidebar.slider("遺漏節奏", 1.0, 5.0, 2.5, key="real_o")
+# 3. 恢復預設值按鈕邏輯
+if st.sidebar.button("🔄 恢復權重預設值"):
+    st.session_state["real_n"] = DEFAULT_WEIGHTS['neighbor']
+    st.session_state["real_t"] = DEFAULT_WEIGHTS['trend']
+    st.session_state["real_f"] = DEFAULT_WEIGHTS['flow']
+    st.session_state["real_o"] = DEFAULT_WEIGHTS['omit']
+    st.rerun() # 立即重新整理畫面以套用數值
 
-# 3. 組合成函數看得懂的字典 (這裡的 key 必須跟 smart_pick_3 內部一致)
+# 4. 數值輸入框 (使用 Number Input)
+sw_n = st.sidebar.number_input("鄰居觸發", min_value=1.0, max_value=10.0, 
+                               value=st.session_state.get("real_n", DEFAULT_WEIGHTS['neighbor']), 
+                               step=0.1, key="real_n")
+
+sw_t = st.sidebar.number_input("短期連動", min_value=1.0, max_value=10.0, 
+                               value=st.session_state.get("real_t", DEFAULT_WEIGHTS['trend']), 
+                               step=0.1, key="real_t")
+
+sw_f = st.sidebar.number_input("能量回流", min_value=0.0, max_value=5.0, 
+                               value=st.session_state.get("real_f", DEFAULT_WEIGHTS['flow']), 
+                               step=0.1, key="real_f")
+
+sw_o = st.sidebar.number_input("遺漏節奏", min_value=1.0, max_value=5.0, 
+                               value=st.session_state.get("real_o", DEFAULT_WEIGHTS['omit']), 
+                               step=0.1, key="real_o")
+
+# 5. 組合成函數使用的字典
 sidebar_weights = {
     'neighbor': sw_n, 
     'trend': sw_t, 
@@ -917,6 +944,7 @@ with tab4: # 第四個 Tab
             
             with st.expander("查看所有測試組合數據"):
                 st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
+
 
 
 
