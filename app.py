@@ -587,7 +587,7 @@ st.sidebar.divider() # 加入分隔線
 
 st.sidebar.header("🎯 建議權重控制")
 
-# 1. 定義預設值常量 (方便統一修改)
+# 1. 初始化 session_state (這段放在最前面，確保不會報錯)
 DEFAULT_WEIGHTS = {
     'neighbor': 4.5,
     'trend': 3.5,
@@ -595,33 +595,46 @@ DEFAULT_WEIGHTS = {
     'omit': 2.5
 }
 
+# 確保 key 已經存在於 session_state 中
+for k, v in DEFAULT_WEIGHTS.items():
+    s_key = f"val_{k}" # 我們用 val_ 作為儲存數值的 key
+    if s_key not in st.session_state:
+        st.session_state[s_key] = v
+
 # 2. 模式開關
 is_defensive = st.sidebar.toggle("🛡️ 啟用風險規避模式", value=False)
 
-# 3. 恢復預設值按鈕邏輯
-if st.sidebar.button("🔄 恢復權重預設值"):
-    st.session_state["real_n"] = DEFAULT_WEIGHTS['neighbor']
-    st.session_state["real_t"] = DEFAULT_WEIGHTS['trend']
-    st.session_state["real_f"] = DEFAULT_WEIGHTS['flow']
-    st.session_state["real_o"] = DEFAULT_WEIGHTS['omit']
-    st.rerun() # 立即重新整理畫面以套用數值
+# 3. 智慧校準與恢復按鈕 (修改這裡的賦值邏輯)
+col_btn1, col_btn2 = st.sidebar.columns(2)
 
-# 4. 數值輸入框 (使用 Number Input)
+if col_btn1.button("🔄 恢復預設"):
+    for k, v in DEFAULT_WEIGHTS.items():
+        st.session_state[f"val_{k}"] = v
+    st.rerun()
+
+# 假設 trend_rec 是從你的診斷系統產生的
+if trend_rec and col_btn2.button("🪄 智慧校準"):
+    st.session_state["val_neighbor"] = trend_rec['neighbor']
+    st.session_state["val_trend"] = trend_rec['trend']
+    st.session_state["val_flow"] = trend_rec['flow']
+    st.session_state["val_omit"] = trend_rec['omit']
+    st.rerun()
+
+# 4. 數值輸入框 (關鍵：不要在元件上直接設定與儲存變數同名的 key)
 sw_n = st.sidebar.number_input("鄰居觸發", min_value=1.0, max_value=10.0, 
-                               value=st.session_state.get("real_n", DEFAULT_WEIGHTS['neighbor']), 
-                               step=0.1, key="real_n")
-
+                               value=st.session_state["val_neighbor"], step=0.1)
 sw_t = st.sidebar.number_input("短期連動", min_value=1.0, max_value=10.0, 
-                               value=st.session_state.get("real_t", DEFAULT_WEIGHTS['trend']), 
-                               step=0.1, key="real_t")
-
+                               value=st.session_state["val_trend"], step=0.1)
 sw_f = st.sidebar.number_input("能量回流", min_value=0.0, max_value=5.0, 
-                               value=st.session_state.get("real_f", DEFAULT_WEIGHTS['flow']), 
-                               step=0.1, key="real_f")
-
+                               value=st.session_state["val_flow"], step=0.1)
 sw_o = st.sidebar.number_input("遺漏節奏", min_value=1.0, max_value=5.0, 
-                               value=st.session_state.get("real_o", DEFAULT_WEIGHTS['omit']), 
-                               step=0.1, key="real_o")
+                               value=st.session_state["val_omit"], step=0.1)
+
+# 同步回 session_state (確保手動輸入也會被記住)
+st.session_state["val_neighbor"] = sw_n
+st.session_state["val_trend"] = sw_t
+st.session_state["val_flow"] = sw_f
+st.session_state["val_omit"] = sw_o
 
 # 5. 組合成函數使用的字典
 sidebar_weights = {
