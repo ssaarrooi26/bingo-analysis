@@ -662,13 +662,7 @@ if rec:
     if not rec['tips']:
         st.sidebar.caption("⚖️ 當前盤勢穩定，符合長期統計規律。")
 
-    if st.sidebar.button("🪄 執行智慧權重校準"):
-        st.session_state["real_n"] = rec['neighbor']
-        st.session_state["real_t"] = rec['trend']
-        st.session_state["real_f"] = rec['flow']
-        st.session_state["real_o"] = rec['omit']
-        st.rerun()
-
+    
 # 3. 功能分頁
 tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
 
