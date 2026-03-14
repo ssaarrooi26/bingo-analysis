@@ -504,6 +504,50 @@ def optimize_weights(df, base_weights):
     
     return best_weights, optimization_results
 
+def dual_dimension_analysis(df):
+    if len(df) < 20:
+        return None, "數據量不足以進行雙維度分析"
+
+    # 定義視窗
+    micro_window = df.tail(10)
+    macro_window = df.tail(100) if len(df) >= 100 else df
+
+    def get_stats(target_df):
+        all_draws = []
+        for _, row in target_df.iterrows():
+            draw = [int(col) for col in target_df.columns if col.isdigit() and row[col] != "" and not pd.isna(row[col])]
+            all_draws.append(set(draw))
+        
+        repeats, neighbors = [], []
+        for i in range(1, len(all_draws)):
+            repeats.append(len(all_draws[i].intersection(all_draws[i-1])))
+            prev_n = {n + d for n in all_draws[i-1] for d in [-1, 1] if 1 <= n + d <= 80}
+            neighbors.append(len(all_draws[i].intersection(prev_n)))
+        
+        return sum(repeats)/len(repeats), sum(neighbors)/len(neighbors)
+
+    micro_rep, micro_nei = get_stats(micro_window)
+    macro_rep, macro_nei = get_stats(macro_window)
+
+    # 權重建議邏輯
+    rec = {'neighbor': 4.5, 'trend': 3.5, 'flow': 2.0, 'omit': 2.5, 'tips': []}
+
+    # 1. 微觀診斷：決定鄰居與短期趨勢
+    if micro_nei > macro_nei * 1.2:
+        rec['neighbor'] = 6.0
+        rec['tips'].append("⚡ 短期鄰居竄升：目前處於『區塊集結』盤勢。")
+    
+    if micro_rep > macro_rep * 1.3:
+        rec['trend'] = 5.5
+        rec['tips'].append("🔥 短期連莊過熱：強勢號碼正在連發。")
+
+    # 2. 宏觀診斷：決定能量回流 (如果長期連莊低，代表號碼輪轉快)
+    if macro_rep < 1.5:
+        rec['flow'] = 4.0
+        rec['tips'].append("🌊 宏觀能量回補：冷門號回歸機率增高。")
+
+    return rec, micro_rep, micro_nei, macro_rep, macro_nei
+
 # 2. 側邊欄：設定參數
 st.sidebar.header("🚀 數據同步工具")
 if st.sidebar.button("🔄 批量同步至雲端"):
@@ -586,6 +630,31 @@ sidebar_weights = {
     'flow': sw_f, 
     'omit': sw_o
 }
+
+#盤勢儀表板
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 盤勢診斷儀表板")
+
+rec, mi_r, mi_n, ma_r, ma_n = dual_dimension_analysis(df)
+
+if rec:
+    # 顯示指標對比
+    col1, col2 = st.sidebar.columns(2)
+    col1.metric("微觀連莊", f"{mi_r:.1f}", f"{mi_r - ma_r:+.1f}")
+    col2.metric("微觀鄰居", f"{mi_n:.1f}", f"{mi_n - ma_n:+.1f}")
+    
+    for tip in rec['tips']:
+        st.sidebar.caption(tip)
+    
+    if not rec['tips']:
+        st.sidebar.caption("⚖️ 當前盤勢穩定，符合長期統計規律。")
+
+    if st.sidebar.button("🪄 執行智慧權重校準"):
+        st.session_state["real_n"] = rec['neighbor']
+        st.session_state["real_t"] = rec['trend']
+        st.session_state["real_f"] = rec['flow']
+        st.session_state["real_o"] = rec['omit']
+        st.rerun()
 
 # 3. 功能分頁
 tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
