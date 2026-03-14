@@ -587,6 +587,8 @@ st.sidebar.divider() # 加入分隔線
 
 st.sidebar.header("🎯 建議權重控制")
 
+rec, mi_r, mi_n, ma_r, ma_n = dual_dimension_analysis(df)
+
 # 1. 初始化 session_state (這段放在最前面，確保不會報錯)
 DEFAULT_WEIGHTS = {
     'neighbor': 4.5,
@@ -647,8 +649,6 @@ sidebar_weights = {
 #盤勢儀表板
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 盤勢診斷儀表板")
-
-rec, mi_r, mi_n, ma_r, ma_n = dual_dimension_analysis(df)
 
 if rec:
     # 顯示指標對比
