@@ -616,10 +616,10 @@ if col_btn1.button("🔄 恢復預設"):
 
 # 假設 trend_rec 是從你的診斷系統產生的
 if rec and col_btn2.button("🪄 智慧校準"):
-    st.session_state["val_neighbor"] = trend_rec['neighbor']
-    st.session_state["val_trend"] = trend_rec['trend']
-    st.session_state["val_flow"] = trend_rec['flow']
-    st.session_state["val_omit"] = trend_rec['omit']
+    st.session_state["val_neighbor"] = rec['neighbor']
+    st.session_state["val_trend"] = rec['trend']
+    st.session_state["val_flow"] = rec['flow']
+    st.session_state["val_omit"] = rec['omit']
     st.rerun()
 
 # 4. 數值輸入框 (關鍵：不要在元件上直接設定與儲存變數同名的 key)
