@@ -615,7 +615,7 @@ if col_btn1.button("🔄 恢復預設"):
     st.rerun()
 
 # 假設 trend_rec 是從你的診斷系統產生的
-if trend_rec and col_btn2.button("🪄 智慧校準"):
+if rec and col_btn2.button("🪄 智慧校準"):
     st.session_state["val_neighbor"] = trend_rec['neighbor']
     st.session_state["val_trend"] = trend_rec['trend']
     st.session_state["val_flow"] = trend_rec['flow']
