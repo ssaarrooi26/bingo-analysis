@@ -764,11 +764,10 @@ with tab3:
         # 假設你的期數欄位名稱為 '期數'
         latest_draw_id = int(df['期數'].max())
         
-        # 2. 顯示最新期數資訊
+        # 顯示最新期數資訊
         st.info(f"📅 當前最新期數：**{latest_draw_id}**")
         
-        # 3. 計算五期循環邏輯
-        # 餘數為 0 代表剛好整除
+        # 計算五期循環邏輯
         remainder = latest_draw_id % 5
         
         if remainder == 0:
@@ -780,20 +779,20 @@ with tab3:
             
         st.divider() # 分隔線
     
-    # 1. 準備基礎數據：計算每個號碼的總出現次數與最後出現期數
+    # 1. 準備基礎數據
     latest_counts = df[existing_cols].notnull().sum()
     
-    # 2. 演算法 A：熱門號碼 (近期最常出現的前 10 名)
+    # 2. 演算法 A：熱門號碼
     hot_numbers = latest_counts.nlargest(10).index.tolist()
     
-    # 3. 演算法 B：潛力冷號 (目前沒開，但總頻率不低的號碼)
-    # 這裡我們隨機從出現次數較少的後 20 名中選 5 個，避免每次都一樣
+    # 3. 演算法 B：潛力冷號
     cold_numbers = latest_counts.nsmallest(20).index.tolist()
-    suggested_cold = random.sample(cold_numbers, 5)
+    # 確保隨機抽取不報錯
+    sample_size = min(len(cold_numbers), 5)
+    suggested_cold = random.sample(cold_numbers, sample_size)
 
     # 顯示建議介面
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("🔥 熱門號碼建議")
         st.write("根據近期大數據，這幾號手氣最旺：")
@@ -815,33 +814,27 @@ with tab3:
     omission_df = pd.DataFrame(list(omissions.items()), columns=['球號', '遺漏期數'])
     omission_df = omission_df.sort_values(by='遺漏期數', ascending=False)
     
-    # 視覺化呈現：最冷門的號碼
     col1, col2 = st.columns([1, 2])
-    
     with col1:
         st.write("🔥 **目前最久未開號碼**")
         st.table(omission_df.head(10).reset_index(drop=True))
         
     with col2:
         st.write("📈 **遺漏分佈圖**")
-        # 使用直條圖顯示遺漏狀況
         st.bar_chart(omission_df.set_index('球號')['遺漏期數'])
 
-    # --- 結合你的 5 期循環邏輯 ---
-    max_omission_num = omission_df.iloc[0]['球號']
-    max_omission_val = omission_df.iloc[0]['遺漏期數']
-    
-    st.info(f"💡 **觀察建議**：號碼 **{max_omission_num}** 已經連續 **{max_omission_val}** 期未開出了。搭配當前循環剩餘期數，可以觀察其是否會在近期反彈。")
+    # 結合 5 期循環邏輯
+    if not omission_df.empty:
+        max_omission_num = omission_df.iloc[0]['球號']
+        max_omission_val = omission_df.iloc[0]['遺漏期數']
+        st.info(f"💡 **觀察建議**：號碼 **{max_omission_num}** 已經連續 **{max_omission_val}** 期未開出了。搭配當前循環剩餘期數，可以觀察其是否會在近期反彈。")
 
-    # 取得最新兩期數據
-	# --- 數據分析與視覺化區塊 ---
-	# --- 數據分析與視覺化區塊 (確保此行與上方的 df 讀取對齊) ---
+    # --- 數據分析與視覺化區塊 ---
     if len(df) >= 2:
-        # 取得最新兩期數據
         last_row = df.iloc[0]  
         prev_row = df.iloc[1]  
         
-        # 找出真正有開出的號碼 (數值 >= 1)，避免將 0 判定為開出
+        # 找出真正有開出的號碼
         current_nums = set([
             col for col in existing_cols 
             if pd.to_numeric(last_row[col], errors='coerce') >= 1
@@ -858,7 +851,6 @@ with tab3:
         col_r1, col_r2 = st.columns([1, 2])
         col_r1.metric("本期連莊數", f"{len(repeat_nums)} 碼")
         
-        # 格式化輸出連莊號碼
         formatted_repeats = sorted([str(n).zfill(2) for n in repeat_nums])
         col_r2.write(f"最新連莊號碼： {', '.join(formatted_repeats) if repeat_nums else '無'}")
         
@@ -870,8 +862,6 @@ with tab3:
         for i in range(0, 80, 10):
             start, end = i + 1, i + 10
             label = f"{start:02d}-{end:02d}"
-            
-            # 統計該區間內真正值為 1 的個數
             section_cols = [str(n).zfill(2) for n in range(start, end + 1) if str(n).zfill(2) in existing_cols]
             count = sum(pd.to_numeric(last_row[section_cols], errors='coerce') >= 1)
             section_data[label] = int(count)
@@ -899,77 +889,70 @@ with tab3:
             tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
         )
         
-
-
-        # UI 顯示
-        # 呼叫更新後的函數
         # --- 核心運算執行 ---
-		# --- 核心運算執行 ---
-	    try:
-	        # 確保 latest_draw_id 為整數以進行餘數運算
-	        draw_id_int = int(latest_draw_id)
-	        remainder = draw_id_int % 5
-	    except:
-	        draw_id_int = 0
-	        remainder = -1
-	
-	    # 呼叫更新後的函數
-	    recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
-	
-	    # --- 當前選號模式說明 ---
-	    if not is_defensive:
-	        st.subheader("🔥 當前模式：進攻型")
-	        st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。")
-	    else:
-	        st.subheader("🛡️ 當前模式：風險規避型")
-	        st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。")
-	
-	    st.markdown("---")
-	
-	    # --- 建議號碼展示 ---
-	    st.subheader("🎯 高精度交叉驗證選碼")
-	    if not recommendations:
-	        st.warning("⚠️ 系統暫時無法產出建議號碼。請確認數據判定是否正確。")
-	    else:
-	        cols = st.columns(3)
-	        for i, num in enumerate(recommendations):
-	            score_val = all_scores.get(num, 0)
-	            cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {score_val:.1f}")
-	
-	    # --- 排行榜展示 ---
-	    st.write("---")
-	    st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
-	
-	    if all_scores:
-	        score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
-	        score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
-	        st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
-	
-	    # --- 系統控制 ---
-	    with st.expander("⚙️ 系統控制與追蹤"):
-	        if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
-	            st.session_state.pick_history = {}
-	            st.success("已成功重置！")
-	            st.rerun()
-		    
-		    if st.session_state.get('pick_history'):
-		        st.write("目前連續推薦紀錄：", st.session_state.pick_history)
-		
-		# --- 循環末端避熱機制說明 ---
-		if remainder != -1:
-		    if remainder in [0, 4]:
-		        st.caption(f"🛡️ 目前期數 {latest_draw_id}：已啟動「循環末端避熱」機制。")
-		    else:
-		        st.caption(f"ℹ️ 目前期數 {latest_draw_id}：循環進行中。")
-		
-		# --- 綜合推薦組合 ---
-		st.divider()
-		st.subheader("🎲 綜合推薦組合")
-		try:
-		    top_tail = max(tail_data, key=tail_data.get)
-		    st.success(f"建議關注：**{max_sec}** 區間的號碼，並優先考慮「**{top_tail}**」尾的組合。")
-		except:
-		    st.info("綜合分析數據讀取中...")
+        try:
+            draw_id_int = int(latest_draw_id)
+            remainder = draw_id_int % 5
+        except:
+            draw_id_int = 0
+            remainder = -1
+
+        # 呼叫建議函式
+        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
+
+        # --- 當前選號模式說明 ---
+        if not is_defensive:
+            st.subheader("🔥 當前模式：進攻型")
+            st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。")
+        else:
+            st.subheader("🛡️ 當前模式：風險規備型")
+            st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。")
+
+        st.markdown("---")
+
+        # --- 建議號碼展示 ---
+        st.subheader("🎯 高精度交叉驗證選碼")
+        if not recommendations:
+            st.warning("⚠️ 系統暫時無法產出建議號碼。請確認數據判定是否正確。")
+        else:
+            cols = st.columns(3)
+            for i, num in enumerate(recommendations):
+                score_val = all_scores.get(num, 0)
+                cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {score_val:.1f}")
+
+        # --- 排行榜展示 ---
+        st.write("---")
+        st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
+        if all_scores:
+            score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
+            score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
+            st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+
+        # --- 系統控制 ---
+        with st.expander("⚙️ 系統控制與追蹤"):
+            if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
+                st.session_state.pick_history = {}
+                st.success("已成功重置！")
+                st.rerun()
+            
+            if st.session_state.get('pick_history'):
+                st.write("目前連續推薦紀錄：", st.session_state.pick_history)
+
+        # --- 循環末端避熱機制說明 ---
+        if remainder != -1:
+            if remainder in [0, 4]:
+                st.caption(f"🛡️ 目前期數 {latest_draw_id}：已啟動「循環末端避熱」機制。")
+            else:
+                st.caption(f"ℹ️ 目前期數 {latest_draw_id}：循環進行中。")
+
+        # --- 綜合推薦組合 ---
+        st.divider()
+        st.subheader("🎲 綜合推薦組合")
+        try:
+            top_tail = max(tail_data, key=tail_data.get)
+            st.success(f"建議關注：**{max_sec}** 區間的號碼，並優先考慮「**{top_tail}**」尾的組合。")
+        except:
+            st.info("綜合分析數據讀取中...")
 
     else:
         st.info("數據量不足，請至少輸入兩期資料以進行進階分析。")
