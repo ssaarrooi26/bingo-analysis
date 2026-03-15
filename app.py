@@ -252,92 +252,114 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
     import random
     import pandas as pd
     import streamlit as st
-
+    
+    # --- 權重初始化 ---
     if weights is None:
         weights = {'neighbor': 4.5, 'flow': 4.0, 'trend': 3.5, 'omit': 2.5}
     
+    # 1. 初始化 Session State
     if 'pick_history' not in st.session_state:
         st.session_state.pick_history = {}
         
     ball_cols = [c for c in df.columns if str(c).isdigit()]
-    # 確保抓到的是最新一期
+    
+    # 取得最新一期數據
     last_draw_row = df.iloc[0]
     last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
     
+    # 初始化評分表 (01-80)
     scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
     
-    # --- 維度一：鄰居與空間 (強化短期感) ---
+    # --- 維度一：鄰居與連動 ---
+    # 鄰居加分
     for num in last_draw_nums:
-        n_int = int(num)
-        for diff in [-1, 1]:
-            nb = str(n_int + diff).zfill(2)
-            if nb in scores:
-                # 防守模式下降低鄰居權重，進攻模式則維持高強度
-                w_nb = weights['neighbor'] if not enable_defense else weights['neighbor'] * 0.5
-                scores[nb] += w_nb
+        try:
+            n_int = int(num)
+            for diff in [-1, 1]:
+                nb = str(n_int + diff).zfill(2)
+                if nb in scores:
+                    w_nb = weights['neighbor'] if not enable_defense else weights['neighbor'] * 0.6
+                    scores[nb] += w_nb
+        except:
+            continue
 
-    # --- 維度二：時間連動 (加入時間衰減，解決號碼僵化) ---
-    # 僅分析最近 30 期，且越遠的分數越低
-    max_trend_lookback = min(len(df)-1, 30)
-    for i in range(max_trend_lookback):
-        current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
+    # 連動響應 (分析最近 50 期)
+    for i in range(min(len(df)-1, 50)):
+        # 取得歷史中獎集合
+        hist_row = df.iloc[i+1]
+        current_set = set([n for n in hist_row.index if n in ball_cols and hist_row.notnull()[n]])
+        
+        # 若與最新一期有交集
         if current_set.intersection(set(last_draw_nums)):
-            # 時間衰減係數：第 1 期加權 100%，第 30 期僅加權 3.3%
-            decay = (max_trend_lookback - i) / max_trend_lookback
-            weight = (weights['trend'] if i < 10 else 1.0) * decay
+            weight = weights['trend'] if i < 10 else 1.0
+            # 該期開出的號碼全部加分
             for num in [n for n in df.iloc[i].index if n in ball_cols]:
-                if num in scores: scores[num] += weight
+                if num in scores: 
+                    scores[num] += weight
 
-    # --- 維度三：遺漏節奏 (改為區間曲線) ---
+    # --- 維度二：遺漏節奏 ---
     for num, o in omissions.items():
-        if num in scores:
-            # 甜蜜點：遺漏 4-9 期是機率回歸的高峰
-            if 4 <= o <= 9:
-                # 5, 8 依然是關鍵節奏點，給予額外加成
-                bonus = 1.3 if o in [5, 8] else 1.0
-                scores[num] += weights['omit'] * bonus
+        n_str = str(num).zfill(2)
+        if n_str in scores:
+            # 針對特定的遺漏值加分
+            if o in [3, 5, 8]: 
+                scores[n_str] += weights['omit']
             
-            # 冷卻邏輯
-            omit_penalty = -10.0 if enable_defense else -3.0
-            if o == 0: scores[num] += omit_penalty
+            # 冷卻力道：剛開出的號碼給予扣分
+            omit_penalty = -6.0 if enable_defense else -2.0
+            if o == 0: 
+                scores[n_str] += omit_penalty
 
-    # --- 維度四：區間熱力 (防守模式強化) ---
+    # --- 維度三：區間熱力 ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
     if zone_cols:
         if not enable_defense:
-            # 進攻：追逐最近一期最熱區塊
-            top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
+            # 【進攻模式】：追熱邏輯
             try:
+                top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
                 start, end = map(int, str(top_zone_name).split('-'))
                 for i in range(start, end + 1):
                     n_str = str(i).zfill(2)
-                    if n_str in scores: scores[n_str] += 2.0 
-            except: pass
+                    if n_str in scores: 
+                        scores[n_str] += 1.5 
+            except: 
+                pass
         else:
-            # 防守：避開過熱區塊
+            # 【防守模式】：過熱保護
             for z in zone_cols:
-                start, end = map(int, z.split('-'))
-                count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
-                if count >= 4: # 該區塊上一期開出 4 顆以上算過熱
-                    for i in range(start, end + 1): 
-                        scores[str(i).zfill(2)] -= 15.0 # 強力壓制
+                try:
+                    start, end = map(int, z.split('-'))
+                    count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
+                    if count >= 4:
+                        for i in range(start, end + 1): 
+                            scores[str(i).zfill(2)] -= 10.0
+                        # 能量回流到兩側
+                        adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
+                        if adj_low in scores: scores[adj_low] += weights['flow']
+                        if adj_high in scores: scores[adj_high] += weights['flow']
+                except:
+                    pass
 
-    # --- 維度五：防重複推薦衰減 ---
+    # --- 維度四：權重衰減 (僅在防守模式啟用) ---
     if enable_defense:
         for num in scores:
             decay_count = st.session_state.pick_history.get(num, 0)
-            if decay_count > 0:
-                scores[num] -= (decay_count * 5.0) # 只要推薦過一次就重扣，迫使號碼跳轉
+            if decay_count >= 3: 
+                scores[num] -= (decay_count * 2.0)
 
-    # 排序與輸出 (排除上期已開號碼)
+    # 3. 排序與輸出
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # 排除剛開過的號碼
     final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
     top_3 = final_candidates[:3]
     
+    # 更新歷史紀錄
     if enable_defense:
-        for num in top_3: st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
+        for num in top_3: 
+            st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
         for num in list(st.session_state.pick_history.keys()):
-            if num not in top_3: del st.session_state.pick_history[num]
+            if num not in top_3: 
+                del st.session_state.pick_history[num]
             
     return top_3, scores
 
