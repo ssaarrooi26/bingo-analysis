@@ -904,52 +904,53 @@ with tab3:
         # UI 顯示
         # 呼叫更新後的函數
         # --- 核心運算執行 ---
-		try:
-		    # 確保 latest_draw_id 為整數以進行餘數運算
-		    draw_id_int = int(latest_draw_id)
-		    remainder = draw_id_int % 5
-		except:
-		    remainder = -1
-		
-		# 呼叫更新後的函數
-		recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
-		
-		# --- 當前選號模式說明 ---
-		if not is_defensive:
-		    st.subheader("🔥 當前模式：進攻型")
-		    st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。")
-		else:
-		    st.subheader("🛡️ 當前模式：風險規避型")
-		    st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。")
-		
-		st.markdown("---")
-		
-		# --- 建議號碼展示 ---
-		st.subheader("🎯 高精度交叉驗證選碼")
-		if not recommendations:
-		    st.warning("⚠️ 系統暫時無法產出建議號碼。請確認 Google Sheet 是否已填入最新開獎數據。")
-		else:
-		    cols = st.columns(3)
-		    for i, num in enumerate(recommendations):
-		        # 使用 .get 避免 KeyError，並格式化小數點
-		        score_val = all_scores.get(num, 0)
-		        cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {score_val:.1f}")
-		
-		# --- 排行榜展示 ---
-		st.write("---")
-		st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
-		
-		if all_scores:
-		    score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
-		    score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
-		    st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
-		
-		# --- 系統控制 ---
-		with st.expander("⚙️ 系統控制與追蹤"):
-		    if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
-		        st.session_state.pick_history = {}
-		        st.success("已成功重置！")
-		        st.rerun()
+		# --- 核心運算執行 ---
+	    try:
+	        # 確保 latest_draw_id 為整數以進行餘數運算
+	        draw_id_int = int(latest_draw_id)
+	        remainder = draw_id_int % 5
+	    except:
+	        draw_id_int = 0
+	        remainder = -1
+	
+	    # 呼叫更新後的函數
+	    recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
+	
+	    # --- 當前選號模式說明 ---
+	    if not is_defensive:
+	        st.subheader("🔥 當前模式：進攻型")
+	        st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。")
+	    else:
+	        st.subheader("🛡️ 當前模式：風險規避型")
+	        st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。")
+	
+	    st.markdown("---")
+	
+	    # --- 建議號碼展示 ---
+	    st.subheader("🎯 高精度交叉驗證選碼")
+	    if not recommendations:
+	        st.warning("⚠️ 系統暫時無法產出建議號碼。請確認數據判定是否正確。")
+	    else:
+	        cols = st.columns(3)
+	        for i, num in enumerate(recommendations):
+	            score_val = all_scores.get(num, 0)
+	            cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {score_val:.1f}")
+	
+	    # --- 排行榜展示 ---
+	    st.write("---")
+	    st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
+	
+	    if all_scores:
+	        score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
+	        score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
+	        st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+	
+	    # --- 系統控制 ---
+	    with st.expander("⚙️ 系統控制與追蹤"):
+	        if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
+	            st.session_state.pick_history = {}
+	            st.success("已成功重置！")
+	            st.rerun()
 		    
 		    if st.session_state.get('pick_history'):
 		        st.write("目前連續推薦紀錄：", st.session_state.pick_history)
