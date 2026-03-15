@@ -743,13 +743,13 @@ if col_btn2.button("🪄 智慧校準"):
         st.sidebar.error("數據量不足，無法校準")
 
 # 4. 數值輸入框 (關鍵：不要在元件上直接設定與儲存變數同名的 key)
-sw_n = st.sidebar.number_input("鄰居觸發", min_value=1.0, max_value=10.0, 
+sw_n = st.sidebar.number_input("鄰居觸發", min_value=1.0, max_value=20.0, 
                                value=st.session_state["val_neighbor"], step=0.1)
-sw_t = st.sidebar.number_input("短期連動", min_value=1.0, max_value=10.0, 
+sw_t = st.sidebar.number_input("短期連動", min_value=1.0, max_value=20.0, 
                                value=st.session_state["val_trend"], step=0.1)
-sw_f = st.sidebar.number_input("能量回流", min_value=0.0, max_value=5.0, 
+sw_f = st.sidebar.number_input("能量回流", min_value=0.0, max_value=10.0, 
                                value=st.session_state["val_flow"], step=0.1)
-sw_o = st.sidebar.number_input("遺漏節奏", min_value=1.0, max_value=5.0, 
+sw_o = st.sidebar.number_input("遺漏節奏", min_value=1.0, max_value=10.0, 
                                value=st.session_state["val_omit"], step=0.1)
 
 # 同步回 session_state (確保手動輸入也會被記住)
