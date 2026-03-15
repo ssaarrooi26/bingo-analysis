@@ -235,87 +235,88 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
     import random
     import pandas as pd
     import streamlit as st
-    
-    # --- 權重初始化 ---
-    # 進攻與防禦模式共享基礎權重，但防禦模式會額外啟用過熱扣分與能量回流
+
     if weights is None:
         weights = {'neighbor': 4.5, 'flow': 4.0, 'trend': 3.5, 'omit': 2.5}
     
-    # 1. 初始化 Session State (僅在啟用防守模式時重要)
     if 'pick_history' not in st.session_state:
         st.session_state.pick_history = {}
         
     ball_cols = [c for c in df.columns if str(c).isdigit()]
+    # 確保抓到的是最新一期
     last_draw_row = df.iloc[0]
     last_draw_nums = [n for n in last_draw_row.index if n in ball_cols and last_draw_row.notnull()[n]]
     
-    # 初始化評分表
     scores = {str(i).zfill(2): 0.0 for i in range(1, 81)}
     
-    # --- 維度一：鄰居與連動 (先前方案的核心) ---
-    # 鄰居加分：回歸「無差別加分」，找回補位感
+    # --- 維度一：鄰居與空間 (強化短期感) ---
     for num in last_draw_nums:
         n_int = int(num)
         for diff in [-1, 1]:
             nb = str(n_int + diff).zfill(2)
             if nb in scores:
-                # 為了讓防禦模式更有感，若開啟防禦，鄰居分數稍微降低，否則維持高強度
-                w_nb = weights['neighbor'] if not enable_defense else weights['neighbor'] * 0.6
+                # 防守模式下降低鄰居權重，進攻模式則維持高強度
+                w_nb = weights['neighbor'] if not enable_defense else weights['neighbor'] * 0.5
                 scores[nb] += w_nb
 
-    # 連動響應：維持極短期與長期權重
-    for i in range(min(len(df)-1, 50)):
+    # --- 維度二：時間連動 (加入時間衰減，解決號碼僵化) ---
+    # 僅分析最近 30 期，且越遠的分數越低
+    max_trend_lookback = min(len(df)-1, 30)
+    for i in range(max_trend_lookback):
         current_set = set([n for n in df.iloc[i+1].index if n in ball_cols and df.iloc[i+1].notnull()[n]])
         if current_set.intersection(set(last_draw_nums)):
-            weight = weights['trend'] if i < 10 else 1.0
+            # 時間衰減係數：第 1 期加權 100%，第 30 期僅加權 3.3%
+            decay = (max_trend_lookback - i) / max_trend_lookback
+            weight = (weights['trend'] if i < 10 else 1.0) * decay
             for num in [n for n in df.iloc[i].index if n in ball_cols]:
                 if num in scores: scores[num] += weight
 
-    # --- 維度二：遺漏節奏 ---
+    # --- 維度三：遺漏節奏 (改為區間曲線) ---
     for num, o in omissions.items():
         if num in scores:
-            if o in [3, 5, 8]: scores[num] += weights['omit']
-            # 強制冷卻力道：防禦模式下扣分更重，避免開關無感
-            omit_penalty = -6.0 if enable_defense else -2.0
+            # 甜蜜點：遺漏 4-9 期是機率回歸的高峰
+            if 4 <= o <= 9:
+                # 5, 8 依然是關鍵節奏點，給予額外加成
+                bonus = 1.3 if o in [5, 8] else 1.0
+                scores[num] += weights['omit'] * bonus
+            
+            # 冷卻邏輯
+            omit_penalty = -10.0 if enable_defense else -3.0
             if o == 0: scores[num] += omit_penalty
 
-    # --- 維度三：區間熱力 (防守模式開關) ---
+    # --- 維度四：區間熱力 (防守模式強化) ---
     zone_cols = [c for c in interval_stats.columns if '-' in str(c)]
     if zone_cols:
         if not enable_defense:
-            # 【進攻模式】：追熱邏輯 (先前方案)
+            # 進攻：追逐最近一期最熱區塊
             top_zone_name = interval_stats[zone_cols].iloc[-1].idxmax()
             try:
                 start, end = map(int, str(top_zone_name).split('-'))
                 for i in range(start, end + 1):
                     n_str = str(i).zfill(2)
-                    if n_str in scores: scores[n_str] += 1.5 
+                    if n_str in scores: scores[n_str] += 2.0 
             except: pass
         else:
-            # 【防守模式】：過熱保護與能量回流 (目前方案)
-            # 強化干預力道，確保號碼會跳轉
+            # 防守：避開過熱區塊
             for z in zone_cols:
                 start, end = map(int, z.split('-'))
                 count = sum(1 for n in last_draw_nums if start <= int(n) <= end)
-                if count >= 4:
+                if count >= 4: # 該區塊上一期開出 4 顆以上算過熱
                     for i in range(start, end + 1): 
-                        scores[str(i).zfill(2)] -= 10.0 # 扣分從 3 改為 10
-                    adj_low, adj_high = str(start-1).zfill(2), str(end+1).zfill(2)
-                    if adj_low in scores: scores[adj_low] += weights['flow']
-                    if adj_high in scores: scores[adj_high] += weights['flow']
+                        scores[str(i).zfill(2)] -= 15.0 # 強力壓制
 
-    # --- 維度四：權重衰減 (僅在防守模式啟用) ---
+    # --- 維度五：防重複推薦衰減 ---
     if enable_defense:
         for num in scores:
             decay_count = st.session_state.pick_history.get(num, 0)
-            if decay_count >= 3: scores[num] -= (decay_count * 2.0)
+            if decay_count > 0:
+                scores[num] -= (decay_count * 5.0) # 只要推薦過一次就重扣，迫使號碼跳轉
 
-    # 3. 排序與輸出
+    # 排序與輸出 (排除上期已開號碼)
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
     top_3 = final_candidates[:3]
     
-    # 僅在啟用防守時更新歷史紀錄
     if enable_defense:
         for num in top_3: st.session_state.pick_history[num] = st.session_state.pick_history.get(num, 0) + 1
         for num in list(st.session_state.pick_history.keys()):
