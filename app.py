@@ -834,53 +834,69 @@ with tab3:
     st.info(f"💡 **觀察建議**：號碼 **{max_omission_num}** 已經連續 **{max_omission_val}** 期未開出了。搭配當前循環剩餘期數，可以觀察其是否會在近期反彈。")
 
     # 取得最新兩期數據
-    if len(df) >= 2:
-        last_row = df.iloc[0]  # 最新一期
-        prev_row = df.iloc[1]  # 前一期
-        
-        # 找出有開出的號碼 (欄位值不為空)
-        current_nums = set([col for col in existing_cols if pd.notnull(last_row[col])])
-        prev_nums = set([col for col in existing_cols if pd.notnull(prev_row[col])])
-        
-        # 1. 連莊號碼分析
-        repeat_nums = current_nums.intersection(prev_nums)
-        
-        st.subheader("1. 🔄 連莊追蹤 (Repeated)")
-        col_r1, col_r2 = st.columns([1, 2])
-        col_r1.metric("本期連莊數", f"{len(repeat_nums)} 碼")
-        col_r2.write(f"最新連莊號碼： {', '.join(sorted(list(repeat_nums))) if repeat_nums else '無'}")
-        
-        st.divider()
-
-        # 2. 黃金區間分析 (每 10 號一區)
-        st.subheader("2. 🏆 黃金區間 (Sections)")
-        section_data = {}
-        for i in range(0, 80, 10):
-            start, end = i + 1, i + 10
-            label = f"{start}-{end}"
-            # 統計這 10 個號碼在最新一期開出幾顆
-            section_cols = [str(n) for n in range(start, end + 1) if str(n) in existing_cols]
-            count = sum(pd.notnull(last_row[section_cols]))
-            section_data[label] = count
-            
-        st.bar_chart(pd.Series(section_data), color="#f4a261")
-        max_sec = max(section_data, key=section_data.get)
-        st.caption(f"💡 目前最旺區間：{max_sec} 區 (開出 {section_data[max_sec]} 碼)")
-
-        st.divider()
-
-        # 3. 尾數熱度分析 (0-9 尾)
-        st.subheader("3. 🔢 尾數分析 (Last Digit)")
-        tail_data = {str(i): 0 for i in range(10)}
-        for num in current_nums:
-            tail = str(int(num) % 10)
-            tail_data[tail] += 1
-            
-        # 轉換成 DataFrame 顯示更精美
-        tail_df = pd.DataFrame(list(tail_data.items()), columns=['尾數', '開出個數'])
-        st.dataframe(
-            tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
-        )
+	if len(df) >= 2:
+	    last_row = df.iloc[0]  # 最新一期
+	    prev_row = df.iloc[1]  # 前一期
+	    
+	    # 【關鍵修正 1】: 找出真正有開出的號碼 (數值 >= 1)
+	    # 使用 pd.to_numeric 確保字串 '1' 或 數字 1 都能正確判定
+	    current_nums = set([
+	        col for col in existing_cols 
+	        if pd.to_numeric(last_row[col], errors='coerce') >= 1
+	    ])
+	    prev_nums = set([
+	        col for col in existing_cols 
+	        if pd.to_numeric(prev_row[col], errors='coerce') >= 1
+	    ])
+	    
+	    # 1. 連莊號碼分析
+	    repeat_nums = current_nums.intersection(prev_nums)
+	    
+	    st.subheader("1. 🔄 連莊追蹤 (Repeated)")
+	    col_r1, col_r2 = st.columns([1, 2])
+	    col_r1.metric("本期連莊數", f"{len(repeat_nums)} 碼")
+	    # 補零顯示更美觀
+	    formatted_repeats = sorted([str(n).zfill(2) for n in repeat_nums])
+	    col_r2.write(f"最新連莊號碼： {', '.join(formatted_repeats) if repeat_nums else '無'}")
+	    
+	    st.divider()
+	
+	    # 2. 黃金區間分析
+	    st.subheader("2. 🏆 黃金區間 (Sections)")
+	    section_data = {}
+	    for i in range(0, 80, 10):
+	        start, end = i + 1, i + 10
+	        label = f"{start:02d}-{end:02d}"
+	        
+	        # 【關鍵修正 2】: 統計區間內值為 1 的總數
+	        section_cols = [str(n).zfill(2) for n in range(start, end + 1) if str(n).zfill(2) in existing_cols]
+	        # 這裡改用 sum() 判定數值是否 >= 1
+	        count = sum(pd.to_numeric(last_row[section_cols], errors='coerce') >= 1)
+	        section_data[label] = int(count)
+	        
+	    st.bar_chart(pd.Series(section_data), color="#f4a261")
+	    max_sec = max(section_data, key=section_data.get)
+	    st.caption(f"💡 目前最旺區間：{max_sec} 區 (開出 {section_data[max_sec]} 碼)")
+	
+	    st.divider()
+	
+	    # 3. 尾數熱度分析
+	    st.subheader("3. 🔢 尾數分析 (Last Digit)")
+	    tail_data = {str(i): 0 for i in range(10)}
+	    for num in current_nums:
+	        # 確保 num 是數字
+	        try:
+	            tail = str(int(num) % 10)
+	            tail_data[tail] += 1
+	        except:
+	            continue
+	            
+	    # 轉換成 DataFrame 顯示
+	    tail_df = pd.DataFrame(list(tail_data.items()), columns=['尾數', '開出個數'])
+	    # 轉置顯示，方便手機查看
+	    st.dataframe(
+	        tail_df.set_index('尾數').T.style.background_gradient(cmap="Greens", axis=1)
+	    )
 
         
 
