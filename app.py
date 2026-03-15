@@ -903,68 +903,72 @@ with tab3:
 
         # UI 顯示
         # 呼叫更新後的函數
-        recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
-        # --- 新增：當前選號模式說明 ---
-        if not is_defensive:
-            st.subheader("🔥 當前模式：進攻型 ")
-            st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。適合連號頻出的強勢盤勢。")
-            st.markdown("---")
-        else:
-            st.subheader("🛡️ 當前模式：風險規避型)")
-            st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。適合號碼分佈散亂的盤勢。")
-            st.markdown("---")
-
-        st.subheader("🎯 高精度交叉驗證選碼")
-        cols = st.columns(3)
-        for i, num in enumerate(recommendations):
-            cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {all_scores[num]}")
-        
-        # --- 新增：顯示前 10 名的高分潛力股 ---
-        st.write("---")
-        st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
-        
-        # 將分數轉為 DataFrame 方便顯示
-        score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
-        score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
-        
-        # 使用 Streamlit 的 dataframe 顯示
-        st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
-        
-        st.caption("註：加權總分綜合了「歷史拖牌連動」、「遺漏轉折週期」與「當前熱門區間」三大指標。")
-
-        # --- 手動重置衰減狀態按鈕 ---
-        st.write("---")
-        st.subheader("⚙️ 系統控制")
-        
-        if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
-            # 清空 session_state 中的紀錄
-            st.session_state.pick_history = {}
-            st.success("已成功重置！所有號碼的「疲勞期」紀錄已清空，下一期將重新計算。")
-            # 強制重新執行，讓畫面立即更新
-            st.rerun()
-        
-        # 顯示目前的追蹤狀態（可選，方便你觀察誰正在被衰減）
-        if st.session_state.pick_history:
-            with st.expander("查看目前追蹤中的號碼"):
-                st.write("以下號碼若連續出現，將會逐期扣分：")
-                for num, count in st.session_state.pick_history.items():
-                    st.text(f"號碼 {num}：已連續推薦 {count} 期")
-
-        # --- 關鍵修正區塊 ---
-        # 這裡用 st.write 先測試，確保邏輯有跑進來
-        # remainder == 0 是指 5 的倍數 (例如期數 115)
-        # remainder == 4 是指 5 的倍數減 1 (例如期數 114)
-        if remainder == 0 or remainder == 4:
-            st.caption(f"🛡️ 目前期數 {latest_draw_id} (餘數 {remainder})：已啟動「循環末端避熱」機制。")
-        else:
-            st.caption(f"ℹ️ 目前期數 {latest_draw_id} (餘數 {remainder})：循環進行中，維持常規分析。")
-
-        # 綜合預測邏輯
-        st.divider()
-        st.subheader("🎲 綜合推薦組合")
-        # 這裡結合最旺區間 + 熱門尾數
-        top_tail = max(tail_data, key=tail_data.get)
-        st.success(f"建議關注：{max_sec} 區間的號碼，並優先考慮「{top_tail}」尾的組合。")
+        # --- 核心運算執行 ---
+		try:
+		    # 確保 latest_draw_id 為整數以進行餘數運算
+		    draw_id_int = int(latest_draw_id)
+		    remainder = draw_id_int % 5
+		except:
+		    remainder = -1
+		
+		# 呼叫更新後的函數
+		recommendations, all_scores = smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=sidebar_weights, enable_defense=is_defensive)
+		
+		# --- 當前選號模式說明 ---
+		if not is_defensive:
+		    st.subheader("🔥 當前模式：進攻型")
+		    st.caption("🚀 策略重點：**鄰居強力補位**、**熱門區域追蹤**。")
+		else:
+		    st.subheader("🛡️ 當前模式：風險規避型")
+		    st.caption("⚖️ 策略重點：**避開飽和區域**、**號碼疲勞降溫**。")
+		
+		st.markdown("---")
+		
+		# --- 建議號碼展示 ---
+		st.subheader("🎯 高精度交叉驗證選碼")
+		if not recommendations:
+		    st.warning("⚠️ 系統暫時無法產出建議號碼。請確認 Google Sheet 是否已填入最新開獎數據。")
+		else:
+		    cols = st.columns(3)
+		    for i, num in enumerate(recommendations):
+		        # 使用 .get 避免 KeyError，並格式化小數點
+		        score_val = all_scores.get(num, 0)
+		        cols[i].metric(label=f"建議號碼 {i+1}", value=num, delta=f"權重分: {score_val:.1f}")
+		
+		# --- 排行榜展示 ---
+		st.write("---")
+		st.subheader("📊 號碼潛力價值排行榜 (Top 10)")
+		
+		if all_scores:
+		    score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
+		    score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
+		    st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+		
+		# --- 系統控制 ---
+		with st.expander("⚙️ 系統控制與追蹤"):
+		    if st.button("🔴 清空推薦歷史 (重置衰減狀態)"):
+		        st.session_state.pick_history = {}
+		        st.success("已成功重置！")
+		        st.rerun()
+		    
+		    if st.session_state.get('pick_history'):
+		        st.write("目前連續推薦紀錄：", st.session_state.pick_history)
+		
+		# --- 循環末端避熱機制說明 ---
+		if remainder != -1:
+		    if remainder in [0, 4]:
+		        st.caption(f"🛡️ 目前期數 {latest_draw_id}：已啟動「循環末端避熱」機制。")
+		    else:
+		        st.caption(f"ℹ️ 目前期數 {latest_draw_id}：循環進行中。")
+		
+		# --- 綜合推薦組合 ---
+		st.divider()
+		st.subheader("🎲 綜合推薦組合")
+		try:
+		    top_tail = max(tail_data, key=tail_data.get)
+		    st.success(f"建議關注：**{max_sec}** 區間的號碼，並優先考慮「**{top_tail}**」尾的組合。")
+		except:
+		    st.info("綜合分析數據讀取中...")
 
     else:
         st.info("數據量不足，請至少輸入兩期資料以進行進階分析。")
