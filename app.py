@@ -224,24 +224,24 @@ def get_interval_stats(df):
 
 # 遺漏期數統計
 def calculate_omission(df, target_numbers=None):
+    # 1. 確保欄位名稱補零 (01, 02...)
     if target_numbers is None:
-        # 自動抓取 01-80 的欄位名稱
         target_numbers = [str(i).zfill(2) for i in range(1, 81) if str(i).zfill(2) in df.columns]
+    
     omission_dict = {}
     
-    # 確保 df 是按期數從大到小排 (最新在最上面)
-    # 若你的 DataFrame 索引本身就是最新的在上面，此處排序可選擇性保留
+    # 2. 確保最新在最上面
     df_sorted = df.sort_values(by='期數', ascending=False).reset_index(drop=True)
     
     for num in target_numbers:
-        # 找到該號碼欄位中，第一個「不是空值」的索引位置
-        # 因為 df 已經重設索引且降序排，索引值剛好就代表遺漏期數
-        not_null_indices = df_sorted[df_sorted[num].notnull()].index
+        # --- 關鍵修正處 ---
+        # 原本是 .notnull()，改為判定數值是否為 1
+        # 先確保該欄位是數字型別，再找值為 1 的索引
+        has_appeared = df_sorted[pd.to_numeric(df_sorted[num], errors='coerce') > 0].index
         
-        if not not_null_indices.empty:
+        if not has_appeared.empty:
             # 第一個出現的位置索引即為遺漏期數
-            # 例如索引 0 有出，遺漏為 0；索引 5 才有，代表遺漏 5 期
-            omission_dict[num] = int(not_null_indices[0])
+            omission_dict[num] = int(has_appeared[0])
         else:
             # 如果整張表都沒出現過，設為資料總長度
             omission_dict[num] = len(df_sorted)
