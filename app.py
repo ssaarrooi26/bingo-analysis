@@ -148,64 +148,58 @@ def load_data(url):
         df_raw = df_raw.dropna(subset=['期數'])
         df_raw = df_raw[df_raw['期數'].astype(str).str.strip() != ""]
         
-        # 3. 轉換為數字（這是去重與排序的基礎）
+        # 3. 轉換為數字
         df_raw['期數'] = pd.to_numeric(df_raw['期數'], errors='coerce')
         df_raw = df_raw.dropna(subset=['期數'])
         
-        # 4. 去重：刪除重複期號（保留第一筆看到的）
+        # 4. 去重
         df_raw = df_raw.drop_duplicates(subset=['期數'], keep='first')
         
-        # 5. 【關鍵修改】排序：由小到大排（舊 -> 新）
-        # ascending=True 會讓最小（最舊）的期號排在第一筆
-        df_raw = df_raw.sort_values(by='期數', ascending=True).reset_index(drop=True)
+        # 5. 【修正重點】排序：必須由大到小（新 -> 舊），這樣 iloc[0] 才是最新一期
+        df_raw = df_raw.sort_values(by='期數', ascending=False).reset_index(drop=True)
         
-        # 6. 格式化：轉回整數再轉字串 (避免 115014242.0 顯示)
+        # 6. 格式化
         df_raw['期數'] = df_raw['pk_id'] = df_raw['期數'].astype(int).astype(str)
         
         return df_raw
     else:
         raise ValueError("CSV 格式錯誤：找不到『期數』欄位")
 
-# --- 執行讀取並實施中斷保護 ---
+# --- 執行讀取與修正 ---
 try:
     df = load_data(SHEET_URL)
     
     if df is not None and not df.empty:
-		# ==========================================
-	    # 【在此處插入：數據格式診斷與自動修正】
-	    # ==========================================
-	    st.sidebar.subheader("🔍 數據對齊檢查")
-	    
-	    # 確保欄位名稱一致性 (例如 1 變成 "01")
-	    df.columns = [str(c).zfill(2) if str(c).isdigit() else c for c in df.columns]
-	    
-	    ball_cols = [c for c in df.columns if c.isdigit()]
-	    if ball_cols:
-	        sample_col = ball_cols[0]
-	        sample_val = df[sample_col].iloc[0]
-	        
-	        # 側邊欄輔助資訊
-	        st.sidebar.caption(f"欄位範例: '{sample_col}' (型別: {type(sample_col).__name__})")
-	        st.sidebar.caption(f"內容範例: '{sample_val}' (型別: {type(sample_val).__name__})")
-	
-	        # 強制內容數值化 (確保 1.0, "1", 1 都能正確判斷)
-	        for col in ball_cols:
-	            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-	    # ==========================================
+        # --- 數據格式診斷區 (確保縮排正確) ---
+        st.sidebar.subheader("🔍 數據對齊檢查")
+        
+        # 欄位對齊 (例如 1 -> "01")
+        df.columns = [str(c).zfill(2) if str(c).isdigit() else c for c in df.columns]
+        
+        ball_cols = [c for c in df.columns if c.isdigit()]
+        if ball_cols:
+            sample_col = ball_cols[0]
+            sample_val = df[sample_col].iloc[0]
+            
+            st.sidebar.caption(f"欄位範例: '{sample_col}' ({type(sample_col).__name__})")
+            st.sidebar.caption(f"內容範例: '{sample_val}' ({type(sample_val).__name__})")
 
-		
+            # 強制數值化
+            for col in ball_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # --- 顯示成功資訊 ---
         st.sidebar.success(f"✅ 同步成功！共 {len(df)} 期")
         
-        # 修正顯示邏輯：第一筆是最舊，最後一筆是最新
-        st.sidebar.write(f"📅 最舊期數 (首筆)：{df['期數'].iloc[0]}")
-        st.sidebar.write(f"🚀 最新期數 (末筆)：{df['期數'].iloc[-1]}")
+        # 正確顯示：首筆是最新
+        st.sidebar.write(f"🚀 最新期數 (首筆)：{df['期數'].iloc[0]}")
+        st.sidebar.write(f"📅 最舊期數 (末筆)：{df['期數'].iloc[-1]}")
     else:
         st.error("⚠️ 雲端資料庫目前是空的。")
-        st.stop() 
-
+        st.stop()
 except Exception as e:
-    st.error(f"❌ 讀取失敗：{e}")
-    st.stop()
+    st.error(f"❌ 讀取失敗: {e}")
+    st.stop() 
 
 def get_interval_stats(df):
     """
