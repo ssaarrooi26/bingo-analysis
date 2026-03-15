@@ -171,6 +171,29 @@ try:
     df = load_data(SHEET_URL)
     
     if df is not None and not df.empty:
+		# ==========================================
+	    # 【在此處插入：數據格式診斷與自動修正】
+	    # ==========================================
+	    st.sidebar.subheader("🔍 數據對齊檢查")
+	    
+	    # 確保欄位名稱一致性 (例如 1 變成 "01")
+	    df.columns = [str(c).zfill(2) if str(c).isdigit() else c for c in df.columns]
+	    
+	    ball_cols = [c for c in df.columns if c.isdigit()]
+	    if ball_cols:
+	        sample_col = ball_cols[0]
+	        sample_val = df[sample_col].iloc[0]
+	        
+	        # 側邊欄輔助資訊
+	        st.sidebar.caption(f"欄位範例: '{sample_col}' (型別: {type(sample_col).__name__})")
+	        st.sidebar.caption(f"內容範例: '{sample_val}' (型別: {type(sample_val).__name__})")
+	
+	        # 強制內容數值化 (確保 1.0, "1", 1 都能正確判斷)
+	        for col in ball_cols:
+	            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+	    # ==========================================
+
+		
         st.sidebar.success(f"✅ 同步成功！共 {len(df)} 期")
         
         # 修正顯示邏輯：第一筆是最舊，最後一筆是最新
