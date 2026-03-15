@@ -247,6 +247,72 @@ def calculate_omission(df, target_numbers=None):
             omission_dict[num] = len(df_sorted)
             
     return omission_dict
+
+def backtest_calibration(df):
+    """
+    透過回溯測試 (Backtesting) 自動計算最優權重
+    """
+    if len(df) < 20:
+        return None
+    
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    test_depth = 15  # 回溯測試最近 15 期
+    
+    # 統計指標
+    stats = {
+        'neighbor_hit_rate': 0.0,  # 鄰居球熱度
+        'repeat_hit_rate': 0.0,    # 連莊球熱度
+        'jump_hit_rate': 0.0       # 亂號(跳號)程度
+    }
+    
+    for i in range(test_depth):
+        # T0: 當前期, T1: 上一期
+        t0_set = set([n for n in ball_cols if pd.to_numeric(df.iloc[i][n], errors='coerce') >= 1])
+        t1_set = set([n for n in ball_cols if pd.to_numeric(df.iloc[i+1][n], errors='coerce') >= 1])
+        
+        # 1. 計算鄰居球規律
+        t1_neighbors = set()
+        for n in t1_set:
+            n_int = int(n)
+            if n_int > 1: t1_neighbors.add(str(n_int-1).zfill(2))
+            if n_int < 80: t1_neighbors.add(str(n_int+1).zfill(2))
+        
+        n_hits = len(t0_set.intersection(t1_neighbors))
+        stats['neighbor_hit_rate'] += n_hits
+        
+        # 2. 計算連莊球規律
+        r_hits = len(t0_set.intersection(t1_set))
+        stats['repeat_hit_rate'] += r_hits
+
+    # 計算平均值
+    avg_n = stats['neighbor_hit_rate'] / test_depth
+    avg_r = stats['repeat_hit_rate'] / test_depth
+    
+    # --- 權重推算邏輯 ---
+    # 基礎權重架構
+    rec = {'neighbor': 4.5, 'trend': 3.5, 'flow': 2.0, 'omit': 2.5}
+    
+    # A. 鄰居權重校準：如果鄰居球平均每期開出超過 4 顆，視為強鄰居盤
+    if avg_n >= 4.5:
+        rec['neighbor'] = round(min(15.0, 4.5 + (avg_n * 1.8)), 1)
+        rec['flow'] = 1.5  # 強規律時，降低能量回流的隨機性
+    elif avg_n <= 2.5:
+        rec['neighbor'] = 3.0 # 盤勢散亂，降低鄰居參考
+        
+    # B. 趨勢(連莊)權重校準：如果連莊球平均超過 5 顆，視為熱號盤
+    if avg_r >= 5.5:
+        rec['trend'] = round(min(12.0, 3.5 + (avg_r * 1.5)), 1)
+        rec['omit'] = 1.5 # 熱號盤時，遺漏值參考價值會被稀釋
+    elif avg_r <= 3.0:
+        rec['trend'] = 2.5
+        rec['omit'] = 4.5 # 連莊少時，改為追蹤遺漏反彈
+        
+    # C. 特殊修正：若兩者皆冷 (混亂盤)
+    if avg_n < 3.0 and avg_r < 3.5:
+        rec['flow'] = 5.0  # 提高能量回流(補位)
+        rec['omit'] = 6.0  # 提高遺漏節奏
+
+    return rec
     
 def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, enable_defense=False):
     import random
@@ -631,9 +697,11 @@ existing_cols = [col for col in target_numbers if col in df.columns and col != '
 
 st.sidebar.divider() # 加入分隔線
 
+
 st.sidebar.header("🎯 建議權重控制")
 
 rec, mi_r, mi_n, ma_r, ma_n = dual_dimension_analysis(df)
+calibrated_rec = backtest_calibration(df)
 
 # 1. 初始化 session_state (這段放在最前面，確保不會報錯)
 DEFAULT_WEIGHTS = {
@@ -661,12 +729,18 @@ if col_btn1.button("🔄 恢復預設"):
     st.rerun()
 
 # 假設 trend_rec 是從你的診斷系統產生的
-if rec and col_btn2.button("🪄 智慧校準"):
-    st.session_state["val_neighbor"] = rec['neighbor']
-    st.session_state["val_trend"] = rec['trend']
-    st.session_state["val_flow"] = rec['flow']
-    st.session_state["val_omit"] = rec['omit']
-    st.rerun()
+if col_btn2.button("🪄 智慧校準"):
+    if calibrated_rec:
+        # 將運算結果存入 session_state
+        st.session_state["val_neighbor"] = calibrated_rec['neighbor']
+        st.session_state["val_trend"] = calibrated_rec['trend']
+        st.session_state["val_flow"] = calibrated_rec['flow']
+        st.session_state["val_omit"] = calibrated_rec['omit']
+        
+        st.sidebar.success(f"已根據最近 15 期盤勢完成優化！")
+        st.rerun()
+    else:
+        st.sidebar.error("數據量不足，無法校準")
 
 # 4. 數值輸入框 (關鍵：不要在元件上直接設定與儲存變數同名的 key)
 sw_n = st.sidebar.number_input("鄰居觸發", min_value=1.0, max_value=10.0, 
