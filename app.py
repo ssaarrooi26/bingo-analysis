@@ -1078,101 +1078,89 @@ with tab4: # 第四個 Tab
     }
 
     if st.button("🚀 開始執行 50 期回測"):
-	    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
-	        # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
-	        # run_backtest 會回傳包含「命中號碼」、「一/二/三星成功」等新欄位的 DataFrame
-	        backtest_df = run_backtest(df, sidebar_weights)
-	    
-	    # --- 1. 錯誤檢查機制 ---
-	    if backtest_df is None or backtest_df.empty:
-	        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整（建議至少需 100 期歷史數據）。")
-	    else:
-	        # --- 2. 符合新統計定義的數據處理 ---
-	        total_tests = len(backtest_df)
-	        success_3 = backtest_df["三星成功"].sum()
-	        success_2 = backtest_df["二星成功"].sum()
-	        success_1 = backtest_df["一星成功"].sum()
-	        
-	        # 計算勝率
-	        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
-	        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
-	        
-	        # --- 3. 顯示儀表板 (比舊版更多維度) ---
-	        st.subheader("🏁 三星命中率回測總結")
-	        c1, c2, c3, c4 = st.columns(4)
-	        c1.metric("回測總期數", f"{total_tests} 期")
-	        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
-	        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
-	        c4.metric("一星命中", f"{success_1} 次")
-	
-	        # --- 4. 顯示詳細回測清單 (優化視覺染色邏輯) ---
-	        st.write("### 📝 詳細模擬紀錄與命中詳情")
-	        
-	        def highlight_hits(row):
-	            """ 根據最高單期命中數量，為整行上色以利觀察 """
-	            val = row['最高單期命中']
-	            if val == 3: 
-	                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
-	            elif val == 2: 
-	                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
-	            elif val == 1: 
-	                return ['background-color: #fff3cd; color: black'] * len(row)
-	            return [''] * len(row)
-	
-	        # 顯示表格，讓用戶能看到「建議號碼」與「命中號碼」的比對
-	        st.dataframe(
-	            backtest_df.style.apply(highlight_hits, axis=1),
-	            use_container_width=True,
-	            height=500
-	        )
+    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
+        # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
+        backtest_df = run_backtest(df, sidebar_weights)
+    
+    # --- 1. 錯誤檢查機制 ---
+    if backtest_df is None or backtest_df.empty:
+        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整（建議至少需 100 期歷史數據）。")
+    else:
+        # --- 2. 符合新統計定義的數據處理 ---
+        total_tests = len(backtest_df)
+        success_3 = backtest_df["三星成功"].sum()
+        success_2 = backtest_df["二星成功"].sum()
+        success_1 = backtest_df["一星成功"].sum()
+        
+        # 計算勝率
+        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+        
+        # --- 3. 顯示儀表板 (含基準權重標註) ---
+        st.subheader("🏁 三星命中率回測總結")
+        
+        # 修正後的基準權重顯示 (建議緊跟在標題後)
+        st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 回流 **{sidebar_weights['flow']}** | 遺漏 **{sidebar_weights['omit']}**")
 
-			# --- 5. 檔案下載功能 (含自動時間戳記) ---
-	        st.write("---")
-	        
-	        import datetime
-	        # 取得台灣當前時間並格式化為：月日_時分 (例如 0317_1430)
-	        current_time = datetime.datetime.now().strftime("%m%d_%H%M")
-	        
-	        # 安全取得回測的起始期號作為檔名一部分
-	        try:
-	            start_id = backtest_df["期數"].iloc[0]
-	        except:
-	            start_id = "report"
-	
-	        # 設定檔名：格式為 bingo_回測_起始期號_時間戳記.csv
-	        file_output_name = f"bingo_backtest_{start_id}_{current_time}.csv"
-	
-	        # 轉換資料
-	        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
-	        
-	        # 建立下載按鈕
-	        st.download_button(
-	            label=f"📥 下載報表 ({current_time})",
-	            data=csv_data,
-	            file_name=file_output_name,
-	            mime="text/csv",
-	            help=f"點擊下載回測詳細紀錄。檔名：{file_output_name}",
-	            use_container_width=True # 讓按鈕寬度填滿側邊空間，更美觀
-	        )
-	        
-	        # --- 6. 權重優化建議 ---
-	        st.divider()
-			
-	        with st.expander("💡 如何解讀這份報告並優化權重？"):
-	            st.markdown(f"""
-	            - **當前三星率：{win_rate_3:.1f}%**
-	            - **當前二星率：{win_rate_2:.1f}%**
-	            
-	            **優化策略：**
-	            1. **如果二星很多但三星為 0**：代表號碼抓對了但分散在不同期，建議調高「短期連動」來增加號碼集中度。
-	            2. **如果連一星都很少**：代表目前的規律完全抓錯，請嘗試按下「智慧校準」重新捕捉盤勢。
-	            3. **命中號碼檢查**：如果中獎的號碼總是在「建議號碼」之外，代表遺漏值的影響力可能被低估。
-	            """)
-                st.caption(f"📊 本次報告基準權重：
-				鄰居 **{sidebar_weights['neighbor']}** | "
-			  f"連動 **{sidebar_weights['trend']}** | "
- 			  f"回流 **{sidebar_weights['flow']}** | "
-        	  f"遺漏 **{sidebar_weights['omit']}**")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("回測總期數", f"{total_tests} 期")
+        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+        c4.metric("一星命中", f"{success_1} 次")
+
+        # --- 4. 顯示詳細回測清單 ---
+        st.write("### 📝 詳細模擬紀錄與命中詳情")
+        
+        def highlight_hits(row):
+            val = row['最高單期命中']
+            if val == 3: 
+                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+            elif val == 2: 
+                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+            elif val == 1: 
+                return ['background-color: #fff3cd; color: black'] * len(row)
+            return [''] * len(row)
+
+        st.dataframe(
+            backtest_df.style.apply(highlight_hits, axis=1),
+            use_container_width=True,
+            height=500
+        )
+
+        # --- 5. 檔案下載功能 ---
+        st.write("---")
+        import datetime
+        current_time = datetime.datetime.now().strftime("%m%d_%H%M")
+        
+        try:
+            start_id = backtest_df["期數"].iloc[0]
+        except:
+            start_id = "report"
+
+        file_output_name = f"bingo_backtest_{start_id}_{current_time}.csv"
+        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
+        
+        st.download_button(
+            label=f"📥 下載報表 ({current_time})",
+            data=csv_data,
+            file_name=file_output_name,
+            mime="text/csv",
+            help=f"點擊下載回測詳細紀錄。檔名：{file_output_name}",
+            use_container_width=True
+        )
+        
+        # --- 6. 權重優化建議 ---
+        st.divider()
+        with st.expander("💡 如何解讀這份報告並優化權重？"):
+            st.markdown(f"""
+            - **當前三星率：{win_rate_3:.1f}%**
+            - **當前二星率：{win_rate_2:.1f}%**
+            
+            **優化策略：**
+            1. **如果二星很多但三星為 0**：代表號碼抓對了但分散在不同期，建議調高「短期連動」權重。
+            2. **如果連一星都很少**：代表策略偏離，建議執行「智慧校準」。
+            3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
+            """)
                 
 
     st.divider()
