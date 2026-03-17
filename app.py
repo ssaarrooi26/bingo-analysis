@@ -1126,19 +1126,33 @@ with tab4: # 第四個 Tab
 	            height=500
 	        )
 
-			# --- 5. 檔案下載功能 ---
+			# --- 5. 檔案下載功能 (含自動時間戳記) ---
 	        st.write("---")
 	        
-	        # 將 DataFrame 轉換為 CSV 格式 (utf-8-sig 可確保 Excel 開啟不亂碼)
+	        import datetime
+	        # 取得台灣當前時間並格式化為：月日_時分 (例如 0317_1430)
+	        current_time = datetime.datetime.now().strftime("%m%d_%H%M")
+	        
+	        # 安全取得回測的起始期號作為檔名一部分
+	        try:
+	            start_id = backtest_df["期數"].iloc[0]
+	        except:
+	            start_id = "report"
+	
+	        # 設定檔名：格式為 bingo_回測_起始期號_時間戳記.csv
+	        file_output_name = f"bingo_backtest_{start_id}_{current_time}.csv"
+	
+	        # 轉換資料
 	        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
 	        
 	        # 建立下載按鈕
 	        st.download_button(
-	            label="📥 下載完整回測報表 (CSV)",
+	            label=f"📥 下載報表 ({current_time})",
 	            data=csv_data,
-	            file_name=f"bingo_backtest_{draw_id}.csv",
+	            file_name=file_output_name,
 	            mime="text/csv",
-	            help="點擊下載本次回測的詳細紀錄，包含建議號碼與命中詳情。"
+	            help=f"點擊下載回測詳細紀錄。檔名：{file_output_name}",
+	            use_container_width=True # 讓按鈕寬度填滿側邊空間，更美觀
 	        )
 	        
 	        # --- 6. 權重優化建議 ---
