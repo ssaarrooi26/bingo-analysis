@@ -1168,7 +1168,10 @@ with tab4: # 第四個 Tab
 	            2. **如果連一星都很少**：代表目前的規律完全抓錯，請嘗試按下「智慧校準」重新捕捉盤勢。
 	            3. **命中號碼檢查**：如果中獎的號碼總是在「建議號碼」之外，代表遺漏值的影響力可能被低估。
 	            """)
-                
+                st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | "
+						   f"連動 **{sidebar_weights['trend']}** | "
+						   f"回流 **{sidebar_weights['flow']}** | "
+						   f"遺漏 **{sidebar_weights['omit']}**")
                 
 
     st.divider()
