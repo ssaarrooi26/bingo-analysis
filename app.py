@@ -1157,10 +1157,7 @@ with tab4: # 第四個 Tab
 	        
 	        # --- 6. 權重優化建議 ---
 	        st.divider()
-			st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | "
-	                   f"連動 **{sidebar_weights['trend']}** | "
-	                   f"回流 **{sidebar_weights['flow']}** | "
-	                   f"遺漏 **{sidebar_weights['omit']}**")
+			st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | "f"連動 **{sidebar_weights['trend']}** | "f"回流 **{sidebar_weights['flow']}** | "f"遺漏 **{sidebar_weights['omit']}**")
 	        with st.expander("💡 如何解讀這份報告並優化權重？"):
 	            st.markdown(f"""
 	            - **當前三星率：{win_rate_3:.1f}%**
