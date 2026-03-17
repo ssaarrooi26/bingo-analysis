@@ -498,54 +498,71 @@ def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     return final_candidates[:3]
 
 def run_backtest(df, weights):
-    # 回測參數
-    test_range = 50 
-    window = 5       
+    import pandas as pd
+    
+    # --- 參數設定 ---
+    test_range = 50   # 執行 50 次模擬
+    window = 5        # 每次模擬觀察後續 5 期的表現
     results = []
     
-    # 1. 建立標準球號清單
-    ball_cols = [str(i).zfill(2) for i in range(1, 81) if str(i).zfill(2) in df.columns]
+    # 1. 取得資料表中屬於「球號」的欄位清單 (確保留有補零格式如 '01')
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
     
+    # 2. 開始回溯循環
     for i in range(window, test_range + window):
+        # 防呆：如果剩餘數據不足以進行 50 期回測，則提前中斷
         if i + 50 >= len(df): 
             break 
         
-        # 模擬當時的歷史 (i期之後)
+        # 模擬「當時」的時間點：
+        # current_df 為當時看到的「過去歷史」
         current_df = df.iloc[i:]  
-        # 之後的實際結果 (i-5 到 i-1 期)
+        # actual_future_5 為當時的「未來開獎結果」
         actual_future_5 = df.iloc[i-window:i] 
         
-        # 統計與選號
+        # 3. 呼叫你的核心演算法：計算遺漏、區間統計並產出 3 個建議號碼
         omissions = calculate_omission(current_df, ball_cols) 
         interval_stats = get_interval_stats(current_df)
-        recs = smart_pick_3_backtest(current_df, omissions, interval_stats, weights)
-        recs_set = set(recs) # 轉 set 加速比對
         
-        # --- 核心邏輯修正：單期比對 ---
+        # 取得建議號碼 (呼叫你原本的 smart_pick 函式)
+        # 注意：這裡解構回傳值，只取前三個建議號碼 [0]
+        recs, _ = smart_pick_3(current_df, omissions, interval_stats, None, weights=weights)
+        
+        # 強制轉為 set 並補零，確保比對時格式一致 (例如 '01' == '01')
+        recs_set = set([str(n).zfill(2) for n in recs])
+        
+        # 4. 核心比對邏輯：找出這 5 期中「單期最高命中數」
         max_hits_in_5_draws = 0
-        hit_details = "" # 紀錄哪一期中了幾顆
+        winning_nums_list = [] # 紀錄中獎的號碼
         
         for _, row in actual_future_5.iterrows():
-            # 取得該單期的開獎號碼 (20顆)
-            current_draw = [str(int(row[c])).zfill(2) for c in ball_cols if pd.notnull(row[c])]
-            # 計算該單期中了幾顆
-            current_hits = len(recs_set.intersection(set(current_draw)))
+            # 取得該期真正開出的 20 個號碼 (判定值 >= 1 的欄位名稱)
+            current_draw = []
+            for c in ball_cols:
+                val = pd.to_numeric(row[c], errors='coerce')
+                if pd.notnull(val) and val >= 1:
+                    current_draw.append(str(c).zfill(2))
             
-            # 紀錄這 5 期中表現最好的一期
-            if current_hits > max_hits_in_5_draws:
-                max_hits_in_5_draws = current_hits
+            # 計算建議號碼與開獎號碼的交集
+            hits = recs_set.intersection(set(current_draw))
+            current_hit_count = len(hits)
+            
+            # 更新這 5 期中的最高紀錄
+            if current_hit_count > max_hits_in_5_draws:
+                max_hits_in_5_draws = current_hit_count
+                winning_nums_list = list(hits) # 紀錄最高命中時中獎的號碼
         
-        # 判定成功：必須有一期中滿 3 顆
-        is_success = 1 if max_hits_in_5_draws == 3 else 0
-        
-        # 安全取得期號
-        draw_id = df.index[i] 
+        # 5. 取得期號並紀錄結果
+        draw_id = df.index[i] # 假設你的 Index 是期號 (如 BINGO 期號)
         
         results.append({
             "期數": draw_id,
             "建議號碼": ", ".join(recs),
+            "命中號碼": ", ".join(winning_nums_list) if winning_nums_list else "無",
             "最高單期命中": max_hits_in_5_draws,
-            "是否成功(三星)": is_success
+            "三星成功": 1 if max_hits_in_5_draws == 3 else 0,
+            "二星成功": 1 if max_hits_in_5_draws == 2 else 0,
+            "一星成功": 1 if max_hits_in_5_draws == 1 else 0
         })
         
     return pd.DataFrame(results)
@@ -1061,63 +1078,83 @@ with tab4: # 第四個 Tab
     }
 
     if st.button("🚀 開始執行 50 期回測"):
-        with st.spinner("系統正在模擬歷史選號並驗證結果..."):
-            # 執行回測
-            backtest_df = run_backtest(df, backtest_weights)
-    
-            # --- 1. Bug 檢查機制 (保留並修正欄位名稱) ---
-            if backtest_df is None or backtest_df.empty:
-                st.warning("回測未產生任何結果，請檢查數據源是否足夠（需大於 100 期）。")
-            # 檢查新版欄位「是否成功(三星)」是否存在
-            elif "是否成功(三星)" not in backtest_df.columns:
-                st.error("回測資料表格式錯誤，請檢查欄位定義。")
-                st.write("目前的欄位有：", backtest_df.columns.tolist()) 
-            else:
-                # --- 2. 符合新統計定義的數據處理 ---
-                total_tests = len(backtest_df)
-                success_tests = backtest_df["是否成功(三星)"].sum()
-                # 統計「差一點就中」的期數 (單期中 2 顆)
-                near_misses = (backtest_df["最高單期命中"] == 2).sum()
+	    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
+	        # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
+	        # run_backtest 會回傳包含「命中號碼」、「一/二/三星成功」等新欄位的 DataFrame
+	        backtest_df = run_backtest(df, sidebar_weights)
+	    
+	    # --- 1. 錯誤檢查機制 ---
+	    if backtest_df is None or backtest_df.empty:
+	        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整（建議至少需 100 期歷史數據）。")
+	    else:
+	        # --- 2. 符合新統計定義的數據處理 ---
+	        total_tests = len(backtest_df)
+	        success_3 = backtest_df["三星成功"].sum()
+	        success_2 = backtest_df["二星成功"].sum()
+	        success_1 = backtest_df["一星成功"].sum()
+	        
+	        # 計算勝率
+	        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+	        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+	        
+	        # --- 3. 顯示儀表板 (比舊版更多維度) ---
+	        st.subheader("🏁 三星命中率回測總結")
+	        c1, c2, c3, c4 = st.columns(4)
+	        c1.metric("回測總期數", f"{total_tests} 期")
+	        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+	        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+	        c4.metric("一星命中", f"{success_1} 次")
+	
+	        # --- 4. 顯示詳細回測清單 (優化視覺染色邏輯) ---
+	        st.write("### 📝 詳細模擬紀錄與命中詳情")
+	        
+	        def highlight_hits(row):
+	            """ 根據最高單期命中數量，為整行上色以利觀察 """
+	            val = row['最高單期命中']
+	            if val == 3: 
+	                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+	            elif val == 2: 
+	                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+	            elif val == 1: 
+	                return ['background-color: #fff3cd; color: black'] * len(row)
+	            return [''] * len(row)
+	
+	        # 顯示表格，讓用戶能看到「建議號碼」與「命中號碼」的比對
+	        st.dataframe(
+	            backtest_df.style.apply(highlight_hits, axis=1),
+	            use_container_width=True,
+	            height=500
+	        )
+
+			# --- 5. 檔案下載功能 ---
+	        st.write("---")
+	        
+	        # 將 DataFrame 轉換為 CSV 格式 (utf-8-sig 可確保 Excel 開啟不亂碼)
+	        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
+	        
+	        # 建立下載按鈕
+	        st.download_button(
+	            label="📥 下載完整回測報表 (CSV)",
+	            data=csv_data,
+	            file_name=f"bingo_backtest_{draw_id}.csv",
+	            mime="text/csv",
+	            help="點擊下載本次回測的詳細紀錄，包含建議號碼與命中詳情。"
+	        )
+	        
+	        # --- 6. 權重優化建議 ---
+	        st.divider()
+	        with st.expander("💡 如何解讀這份報告並優化權重？"):
+	            st.markdown(f"""
+	            - **當前三星率：{win_rate_3:.1f}%**
+	            - **當前二星率：{win_rate_2:.1f}%**
+	            
+	            **優化策略：**
+	            1. **如果二星很多但三星為 0**：代表號碼抓對了但分散在不同期，建議調高「短期連動」來增加號碼集中度。
+	            2. **如果連一星都很少**：代表目前的規律完全抓錯，請嘗試按下「智慧校準」重新捕捉盤勢。
+	            3. **命中號碼檢查**：如果中獎的號碼總是在「建議號碼」之外，代表遺漏值的影響力可能被低估。
+	            """)
                 
-                # 避免除以 0 的安全檢查
-                win_rate = (success_tests / total_tests * 100) if total_tests > 0 else 0
                 
-                # --- 3. 顯示儀表板 ---
-                st.subheader("🏁 單期三星回測報告")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("回測總期數", f"{total_tests} 期")
-                c2.metric("三星成功次數", f"{success_tests} 次")
-                c3.metric("三星總勝率", f"{win_rate:.2f}%")
-                
-                # 輔助提示
-                if near_misses > 0:
-                    st.write(f"💡 備註：在 50 期中，有 **{near_misses}** 期達到了「單期中 2 顆」，距離三星僅一步之遙！")
-                
-                # --- 4. 顯示詳細回測清單 (優化顏色邏輯) ---
-                st.write("### 📝 詳細回測紀錄")
-                
-                def highlight_stars(val):
-                    if val == 3: 
-                        return 'background-color: #ff4b4b; color: white; font-weight: bold' # 三星達成：鮮紅色
-                    if val == 2: 
-                        return 'background-color: #ffaa00; color: black; font-weight: bold' # 二星：橘色
-                    if val == 1: 
-                        return 'background-color: #fff3cd; color: black' # 一星：淡黃色
-                    return ''
-    
-                # 使用新欄位「最高單期命中」進行染色
-                st.dataframe(
-                    backtest_df.style.applymap(highlight_stars, subset=['最高單期命中']),
-                    use_container_width=True,
-                    height=400
-                )
-                
-                # --- 5. 權重優化建議 (根據三星邏輯調整語義) ---
-                st.divider()
-                st.info("💡 **權重優化建議**：\n"
-                        "* **若勝率為 0% 但二星(橘色)很多**：代表號碼抓取正確但集中度不足，建議微調「短期連動」或「區間熱力」。\n"
-                        "* **若連一星(黃色)都很少**：代表策略完全偏離，建議大幅調高「鄰居觸發」或「遺漏節奏」權重。\n"
-                        "* **能量回流建議**：若命中號碼總是在開出後才出現在預測中，請提高「能量回流」權重。")
 
     st.divider()
     st.subheader("🧪 權重 AI 自動尋優")
