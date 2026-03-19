@@ -591,7 +591,8 @@ def run_backtest(df, base_weights):
             "信心指標": confidence,
             "參與建議": advice,
             "三星成功": 1 if max_hits == 3 else 0,
-            "二星成功": 1 if max_hits == 2 else 0
+            "二星成功": 1 if max_hits == 2 else 0,
+			"一星成功": 1 if max_hits == 1 else 0
         })
         
     return pd.DataFrame(results)
