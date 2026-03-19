@@ -497,72 +497,101 @@ def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     
     return final_candidates[:3]
 
-def run_backtest(df, weights):
+def run_backtest(df, base_weights):
     import pandas as pd
-    
+    import numpy as np
+
     # --- 參數設定 ---
     test_range = 50   # 執行 50 次模擬
     window = 5        # 每次模擬觀察後續 5 期的表現
     results = []
     
-    # 1. 取得資料表中屬於「球號」的欄位清單 (確保留有補零格式如 '01')
+    # 1. 取得資料表中的球號欄位 (確保格式為 '01', '02'...)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 2. 開始回溯循環
+    # 2. 開始 50 期回溯循環
     for i in range(window, test_range + window):
-        # 防呆：如果剩餘數據不足以進行 50 期回測，則提前中斷
         if i + 50 >= len(df): 
             break 
         
-        # 模擬「當時」的時間點：
-        # current_df 為當時看到的「過去歷史」
-        current_df = df.iloc[i:]  
-        # actual_future_5 為當時的「未來開獎結果」
-        actual_future_5 = df.iloc[i-window:i] 
+        # 模擬當時的時間點：過去歷史 vs 未來開獎
+        current_df = df.iloc[i:]           # 當時看到的「歷史」
+        actual_future_5 = df.iloc[i-window:i] # 當時的「未來 5 期」結果
         
-        # 3. 呼叫你的核心演算法：計算遺漏、區間統計並產出 3 個建議號碼
+        # --- 🕵️ Step 1: 盤勢自動偵測 (分析最近 10 期規律) ---
+        recent_10 = current_df.head(10)
+        neighbor_hits = 0
+        
+        # 遍歷最近 10 期，計算「鄰居球」出現的密集度
+        for idx in range(len(recent_10)-1):
+            # 取得該期開獎號碼
+            curr_row = recent_10.iloc[idx][ball_cols]
+            curr_draw = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(curr_row[c], errors='coerce') >= 1])
+            
+            # 取得前一期開獎號碼
+            prev_row = recent_10.iloc[idx+1][ball_cols]
+            prev_draw = set([str(p).zfill(2) for p in ball_cols if pd.to_numeric(prev_row[p], errors='coerce') >= 1])
+            
+            # 計算鄰居球 (與前一期號碼差值為 1 的號碼)
+            neighbor_hits += len([n for n in curr_draw if any(abs(int(n)-int(p)) == 1 for p in prev_draw)])
+        
+        avg_neighbor = neighbor_hits / 10 # 鄰居球密集度指標
+        
+        # --- ⚙️ Step 2: 動態權重校準 (Dynamic Calibration) ---
+        # 基於你側邊欄的 base_weights 進行加成
+        dynamic_weights = base_weights.copy()
+        
+        if avg_neighbor > 4.5:
+            trend_type = "🔥 熱門連動盤"
+            confidence = "高 (High)"
+            advice = "積極參與"
+            # 校準：拉高鄰居與趨勢權重
+            dynamic_weights['neighbor'] = round(base_weights['neighbor'] * 1.6, 1)
+            dynamic_weights['trend'] = round(base_weights['trend'] * 1.3, 1)
+            dynamic_weights['omit'] = round(base_weights['omit'] * 0.6, 1)
+        elif avg_neighbor < 2.0:
+            trend_type = "❄️ 冷號回補盤"
+            confidence = "中 (Medium)"
+            advice = "謹慎小額"
+            # 校準：大幅拉高遺漏權重
+            dynamic_weights['omit'] = round(base_weights['omit'] * 2.2, 1)
+            dynamic_weights['neighbor'] = round(base_weights['neighbor'] * 0.5, 1)
+        else:
+            trend_type = "⚖️ 標準平衡盤"
+            confidence = "低 (Low)"
+            advice = "建議觀望"
+            # 保持平衡，微調回流權重
+            dynamic_weights['flow'] = round(base_weights['flow'] * 1.2, 1)
+
+        # --- 🎯 Step 3: 執行智慧選號 (使用校準後的權重) ---
         omissions = calculate_omission(current_df, ball_cols) 
         interval_stats = get_interval_stats(current_df)
         
-        # 取得建議號碼 (呼叫你原本的 smart_pick 函式)
-        # 注意：這裡解構回傳值，只取前三個建議號碼 [0]
-        recs, _ = smart_pick_3(current_df, omissions, interval_stats, None, weights=weights)
-        
-        # 強制轉為 set 並補零，確保比對時格式一致 (例如 '01' == '01')
+        recs, _ = smart_pick_3(current_df, omissions, interval_stats, None, weights=dynamic_weights)
         recs_set = set([str(n).zfill(2) for n in recs])
         
-        # 4. 核心比對邏輯：找出這 5 期中「單期最高命中數」
-        max_hits_in_5_draws = 0
-        winning_nums_list = [] # 紀錄中獎的號碼
-        
+        # --- 📊 Step 4: 未來 5 期命中檢驗 ---
+        max_hits = 0
+        winning_nums = []
         for _, row in actual_future_5.iterrows():
-            # 取得該期真正開出的 20 個號碼 (判定值 >= 1 的欄位名稱)
-            current_draw = []
-            for c in ball_cols:
-                val = pd.to_numeric(row[c], errors='coerce')
-                if pd.notnull(val) and val >= 1:
-                    current_draw.append(str(c).zfill(2))
-            
-            # 計算建議號碼與開獎號碼的交集
-            hits = recs_set.intersection(set(current_draw))
-            current_hit_count = len(hits)
-            
-            # 更新這 5 期中的最高紀錄
-            if current_hit_count > max_hits_in_5_draws:
-                max_hits_in_5_draws = current_hit_count
-                winning_nums_list = list(hits) # 紀錄最高命中時中獎的號碼
+            draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+            hits = recs_set.intersection(set(draw))
+            if len(hits) > max_hits:
+                max_hits = len(hits)
+                winning_nums = list(hits)
         
-        # 5. 取得期號並紀錄結果
-        draw_id = df.index[i] # 假設你的 Index 是期號 (如 BINGO 期號)
-        
+        # --- 📝 Step 5: 產出報告紀錄 ---
         results.append({
-            "期數": draw_id,
+            "期數": df.index[i],
             "建議號碼": ", ".join(recs),
-            "命中號碼": ", ".join(winning_nums_list) if winning_nums_list else "無",
-            "最高單期命中": max_hits_in_5_draws,
-            "三星成功": 1 if max_hits_in_5_draws == 3 else 0,
-            "二星成功": 1 if max_hits_in_5_draws == 2 else 0,
-            "一星成功": 1 if max_hits_in_5_draws == 1 else 0
+            "命中號碼": ", ".join(winning_nums) if winning_nums else "無",
+            "最高命中": max_hits,
+            "偵測盤勢": trend_type,
+            "校準權重 (鄰/遺/趨)": f"{dynamic_weights['neighbor']} / {dynamic_weights['omit']} / {dynamic_weights['trend']}",
+            "信心指標": confidence,
+            "參與建議": advice,
+            "三星成功": 1 if max_hits == 3 else 0,
+            "二星成功": 1 if max_hits == 2 else 0
         })
         
     return pd.DataFrame(results)
