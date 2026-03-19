@@ -497,80 +497,69 @@ def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     
     return final_candidates[:3]
 
-def run_backtest(df, base_weights):
+def run_backtest(df, base_weights, use_ai):
     import pandas as pd
     import numpy as np
 
     # --- 參數設定 ---
-    test_range = 50   # 執行 50 次模擬
-    window = 5        # 每次模擬觀察後續 5 期的表現
+    test_range = 50   
+    window = 5        
     results = []
-    
-    # 1. 取得資料表中的球號欄位 (確保格式為 '01', '02'...)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 2. 開始 50 期回溯循環
     for i in range(window, test_range + window):
         if i + 50 >= len(df): 
             break 
         
-        # 模擬當時的時間點：過去歷史 vs 未來開獎
-        current_df = df.iloc[i:]           # 當時看到的「歷史」
-        actual_future_5 = df.iloc[i-window:i] # 當時的「未來 5 期」結果
+        # 模擬當時時間點
+        current_df = df.iloc[i:]           
+        actual_future_5 = df.iloc[i-window:i] 
         
-        # --- 🕵️ Step 1: 盤勢自動偵測 (分析最近 10 期規律) ---
+        # --- 🕵️ Step 1: 盤勢偵測 (無論有無開啟 AI 都執行偵測，供分析參考) ---
         recent_10 = current_df.head(10)
         neighbor_hits = 0
-        
-        # 遍歷最近 10 期，計算「鄰居球」出現的密集度
         for idx in range(len(recent_10)-1):
-            # 取得該期開獎號碼
             curr_row = recent_10.iloc[idx][ball_cols]
             curr_draw = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(curr_row[c], errors='coerce') >= 1])
-            
-            # 取得前一期開獎號碼
             prev_row = recent_10.iloc[idx+1][ball_cols]
             prev_draw = set([str(p).zfill(2) for p in ball_cols if pd.to_numeric(prev_row[p], errors='coerce') >= 1])
-            
-            # 計算鄰居球 (與前一期號碼差值為 1 的號碼)
             neighbor_hits += len([n for n in curr_draw if any(abs(int(n)-int(p)) == 1 for p in prev_draw)])
         
-        avg_neighbor = neighbor_hits / 10 # 鄰居球密集度指標
+        avg_neighbor = neighbor_hits / 10
         
-        # --- ⚙️ Step 2: 動態權重校準 (Dynamic Calibration) ---
-        # 基於你側邊欄的 base_weights 進行加成
+        # --- ⚙️ Step 2: 權重決策邏輯 ---
+        # 初始化為手動設定
         dynamic_weights = base_weights.copy()
+        strategy_mode = "手動配置"
         
+        # 偵測當前盤勢屬性
         if avg_neighbor > 4.5:
             trend_type = "🔥 熱門連動盤"
-            confidence = "高 (High)"
-            advice = "積極參與"
-            # 校準：拉高鄰居與趨勢權重
-            dynamic_weights['neighbor'] = round(base_weights['neighbor'] * 1.6, 1)
-            dynamic_weights['trend'] = round(base_weights['trend'] * 1.3, 1)
-            dynamic_weights['omit'] = round(base_weights['omit'] * 0.6, 1)
-        elif avg_neighbor < 2.0:
+            confidence = "高"
+            # 專家範本 A
+            ai_template = {'neighbor': 8.5, 'omit': 1.0, 'trend': 5.5, 'flow': 2.0}
+        elif avg_neighbor < 2.2:
             trend_type = "❄️ 冷號回補盤"
-            confidence = "中 (Medium)"
-            advice = "謹慎小額"
-            # 校準：大幅拉高遺漏權重
-            dynamic_weights['omit'] = round(base_weights['omit'] * 2.2, 1)
-            dynamic_weights['neighbor'] = round(base_weights['neighbor'] * 0.5, 1)
+            confidence = "中"
+            # 專家範本 B
+            ai_template = {'neighbor': 1.2, 'omit': 9.5, 'trend': 1.0, 'flow': 3.0}
         else:
             trend_type = "⚖️ 標準平衡盤"
-            confidence = "低 (Low)"
-            advice = "建議觀望"
-            # 保持平衡，微調回流權重
-            dynamic_weights['flow'] = round(base_weights['flow'] * 1.2, 1)
+            confidence = "低"
+            # 專家範本 C (平衡型)
+            ai_template = {'neighbor': 4.0, 'omit': 4.0, 'trend': 4.0, 'flow': 4.0}
 
-        # --- 🎯 Step 3: 執行智慧選號 (使用校準後的權重) ---
+        # 如果開啟 AI，則執行「範本覆蓋制」
+        if use_ai:
+            dynamic_weights = ai_template
+            strategy_mode = "AI 自動校準"
+
+        # --- 🎯 Step 3: 選號與驗證 ---
         omissions = calculate_omission(current_df, ball_cols) 
         interval_stats = get_interval_stats(current_df)
-        
         recs, _ = smart_pick_3(current_df, omissions, interval_stats, None, weights=dynamic_weights)
         recs_set = set([str(n).zfill(2) for n in recs])
         
-        # --- 📊 Step 4: 未來 5 期命中檢驗 ---
         max_hits = 0
         winning_nums = []
         for _, row in actual_future_5.iterrows():
@@ -580,19 +569,19 @@ def run_backtest(df, base_weights):
                 max_hits = len(hits)
                 winning_nums = list(hits)
         
-        # --- 📝 Step 5: 產出報告紀錄 ---
+        # --- 📝 Step 4: 產出報告 (包含最終採用權重) ---
         results.append({
             "期數": df.index[i],
             "建議號碼": ", ".join(recs),
             "命中號碼": ", ".join(winning_nums) if winning_nums else "無",
             "最高單期命中": max_hits,
+            "策略模式": strategy_mode,      # 💡 紀錄是手動還是 AI
             "偵測盤勢": trend_type,
-            "校準權重 (鄰/遺/趨)": f"{dynamic_weights['neighbor']} / {dynamic_weights['omit']} / {dynamic_weights['trend']}",
-            "信心指標": confidence,
-            "參與建議": advice,
+            "最終權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
+            "信心指數": confidence,
             "三星成功": 1 if max_hits == 3 else 0,
             "二星命中": 1 if max_hits == 2 else 0,
-			"一星命中": 1 if max_hits == 1 else 0
+            "一星命中": 1 if max_hits == 1 else 0
         })
         
     return pd.DataFrame(results)
@@ -812,6 +801,14 @@ sidebar_weights = {
     'flow': sw_f, 
     'omit': sw_o
 }
+
+# --- 回測控制區 ---
+st.sidebar.subheader("🤖 策略控制")
+use_ai_calibration = st.sidebar.checkbox(
+    "開啟 AI 動態權重接管", 
+    value=True, 
+    help="勾選時：系統自動偵測盤勢並強制覆蓋為專家權重。未勾選：完全採用上方手動設定。"
+)
 
 #盤勢儀表板
 st.sidebar.markdown("---")
@@ -1110,7 +1107,7 @@ with tab4: # 第四個 Tab
     if st.button("🚀 開始執行 50 期回測"):
 	    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
 	        # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
-	        backtest_df = run_backtest(df, sidebar_weights)
+	        backtest_df = run_backtest(df, sidebar_weights, use_ai_calibration)
 	    
 	    # --- 1. 錯誤檢查機制 ---
 	    if backtest_df is None or backtest_df.empty:
