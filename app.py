@@ -585,14 +585,14 @@ def run_backtest(df, base_weights):
             "期數": df.index[i],
             "建議號碼": ", ".join(recs),
             "命中號碼": ", ".join(winning_nums) if winning_nums else "無",
-            "最高命中": max_hits,
+            "最高單期命中": max_hits,
             "偵測盤勢": trend_type,
             "校準權重 (鄰/遺/趨)": f"{dynamic_weights['neighbor']} / {dynamic_weights['omit']} / {dynamic_weights['trend']}",
             "信心指標": confidence,
             "參與建議": advice,
             "三星成功": 1 if max_hits == 3 else 0,
-            "二星成功": 1 if max_hits == 2 else 0,
-			"一星成功": 1 if max_hits == 1 else 0
+            "二星命中": 1 if max_hits == 2 else 0,
+			"一星命中": 1 if max_hits == 1 else 0
         })
         
     return pd.DataFrame(results)
@@ -1119,8 +1119,8 @@ with tab4: # 第四個 Tab
 	        # --- 2. 符合新統計定義的數據處理 ---
 	        total_tests = len(backtest_df)
 	        success_3 = backtest_df["三星成功"].sum()
-	        success_2 = backtest_df["二星成功"].sum()
-	        success_1 = backtest_df["一星成功"].sum()
+	        success_2 = backtest_df["二星命中"].sum()
+	        success_1 = backtest_df["一星命中"].sum()
 	        
 	        # 計算勝率
 	        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
