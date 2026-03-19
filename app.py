@@ -503,7 +503,7 @@ def run_backtest(df, base_weights, use_ai):
 
     # --- 參數設定 ---
     test_range = 50   
-    window = 5        
+    window = 1        # ⚡ 修改：從 5 改為 1，改為「直擊模式」，僅驗證建議號碼在下一期的表現
     results = []
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
@@ -513,9 +513,10 @@ def run_backtest(df, base_weights, use_ai):
         
         # 模擬當時時間點
         current_df = df.iloc[i:]           
-        actual_future_5 = df.iloc[i-window:i] 
+        # ⚡ 修改：只取開獎序列中「緊接在歷史之後」的那一期
+        actual_next_draw = df.iloc[i-1] 
         
-        # --- 🕵️ Step 1: 盤勢偵測 (無論有無開啟 AI 都執行偵測，供分析參考) ---
+        # --- 🕵️ Step 1: 盤勢偵測 (分析最近 10 期規律) ---
         recent_10 = current_df.head(10)
         neighbor_hits = 0
         for idx in range(len(recent_10)-1):
@@ -528,28 +529,22 @@ def run_backtest(df, base_weights, use_ai):
         avg_neighbor = neighbor_hits / 10
         
         # --- ⚙️ Step 2: 權重決策邏輯 ---
-        # 初始化為手動設定
         dynamic_weights = base_weights.copy()
         strategy_mode = "手動配置"
         
-        # 偵測當前盤勢屬性
         if avg_neighbor > 4.5:
             trend_type = "🔥 熱門連動盤"
             confidence = "高"
-            # 專家範本 A
             ai_template = {'neighbor': 8.5, 'omit': 1.0, 'trend': 5.5, 'flow': 2.0}
         elif avg_neighbor < 2.2:
             trend_type = "❄️ 冷號回補盤"
             confidence = "中"
-            # 專家範本 B
             ai_template = {'neighbor': 1.2, 'omit': 9.5, 'trend': 1.0, 'flow': 3.0}
         else:
             trend_type = "⚖️ 標準平衡盤"
             confidence = "低"
-            # 專家範本 C (平衡型)
             ai_template = {'neighbor': 4.0, 'omit': 4.0, 'trend': 4.0, 'flow': 4.0}
 
-        # 如果開啟 AI，則執行「範本覆蓋制」
         if use_ai:
             dynamic_weights = ai_template
             strategy_mode = "AI 自動校準"
@@ -560,28 +555,26 @@ def run_backtest(df, base_weights, use_ai):
         recs, _ = smart_pick_3(current_df, omissions, interval_stats, None, weights=dynamic_weights)
         recs_set = set([str(n).zfill(2) for n in recs])
         
-        max_hits = 0
-        winning_nums = []
-        for _, row in actual_future_5.iterrows():
-            draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
-            hits = recs_set.intersection(set(draw))
-            if len(hits) > max_hits:
-                max_hits = len(hits)
-                winning_nums = list(hits)
+        # --- 📊 Step 4: 下一期命中檢驗 (單期驗證) ---
+        # ⚡ 修改：直接取得該期號碼，不再使用迴圈跑 5 期
+        draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(actual_next_draw[c], errors='coerce') >= 1]
+        hits = recs_set.intersection(set(draw))
+        hit_count = len(hits) # ⚡ 修改：單期命中數
+        winning_nums = list(hits)
         
-        # --- 📝 Step 4: 產出報告 (包含最終採用權重) ---
+        # --- 📝 Step 4: 產出報告 ---
         results.append({
-            "期數": df.index[i],
+            "期數": df.index[i-1],           # ⚡ 修改：顯示被預測的那一期期號
             "建議號碼": ", ".join(recs),
             "命中號碼": ", ".join(winning_nums) if winning_nums else "無",
-            "最高單期命中": max_hits,
-            "策略模式": strategy_mode,      # 💡 紀錄是手動還是 AI
+            "最高單期命中": hit_count,              
+            "策略模式": strategy_mode,      
             "偵測盤勢": trend_type,
             "最終權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
             "信心指數": confidence,
-            "三星成功": 1 if max_hits == 3 else 0,
-            "二星命中": 1 if max_hits == 2 else 0,
-            "一星命中": 1 if max_hits == 1 else 0
+            "三星成功": 1 if hit_count == 3 else 0,
+            "二星命中": 1 if hit_count == 2 else 0,
+            "一星命中": 1 if hit_count == 1 else 0
         })
         
     return pd.DataFrame(results)
