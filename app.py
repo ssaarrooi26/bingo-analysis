@@ -665,62 +665,63 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
     results = []
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 設定回測期數（從最新一期往回推 50 期）
+    # 執行 50 期回測
     test_range = 50
     for i in range(1, test_range + 1):
-        # 確保有足夠的 150 期資料作為分析視野
+        # 檢查剩餘資料是否足夠分析
         if i + 150 >= len(df): break
         
-        # 模擬當時看到的 150 期歷史視窗 (解決斷層問題)
+        # 1. 模擬歷史視窗：取得該期之前的 150 期資料
         current_df = df.iloc[i : i + 150]
-        actual_next_draw = df.iloc[i-1] # 預測目標期
+        actual_next_draw = df.iloc[i-1] # 這是我們要預測的那一期
         
-        # --- ⚡ 關鍵修正：始終鎖定側邊欄權重 ---
-        # 即使 use_ai 為 True，在此函式中也僅使用 base_weights
-        dynamic_weights = base_weights.copy()
+        # 2. ⚡ 權重設定：鎖定傳入的 base_weights (側邊欄數值)
+        # 完全不進行 AI 自動偵測，保持與使用者設定同步
+        test_weights = base_weights.copy()
 
-        # --- ⚡ 數據預處理：計算當下的區間熱度 ---
-        # 這是 get_global_ranking 運算所必需的輸入
+        # 3. ⚡ 模擬當時的環境數據
+        # 由於 get_global_ranking 需要區間熱度，我們根據該視窗計算最近 20 期熱度
         temp_interval_stats = {}
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         for key in interval_keys:
             start, end = map(int, key.split('-'))
-            # 統計該區間在 current_df 最近 20 期中的出現次數
             count = 0
             for _, row in current_df.head(20).iterrows():
                 count += sum(1 for n in ball_cols if start <= int(n) <= end and pd.to_numeric(row[n], errors='coerce') >= 1)
             temp_interval_stats[key] = count / 20.0
 
-        # --- ⚡ 呼叫全域排名邏輯 ---
-        # 傳入當前視窗資料、空遺漏(由函式內重算)、區間統計、側邊欄權重
-        rank_df = get_global_ranking(current_df, {}, temp_interval_stats, dynamic_weights)
+        # 4. 🔍 執行全域排名邏輯
+        # 注意：omissions 傳入空 {}，因為 get_global_ranking 內部會自行根據 150 期視窗重算
+        rank_df_raw = get_global_ranking(current_df, {}, temp_interval_stats, test_weights)
         
-        # --- ⚡ 強制修正：確保「總得分」為純數字以利排序 ---
-        if not rank_df.empty:
-            rank_df["總得分"] = pd.to_numeric(rank_df["總得分"], errors='coerce').fillna(0)
-            rank_df = rank_df.sort_values(by="總得分", ascending=False).reset_index(drop=True)
+        # 5. 🛡️ 資料加固：強制轉為純數值並重新排序 (解決 ValueError)
+        if not rank_df_raw.empty:
+            rank_df_raw["總得分"] = pd.to_numeric(rank_df_raw["總得分"], errors='coerce').fillna(0)
+            rank_df = rank_df_raw.sort_values(by="總得分", ascending=False).reset_index(drop=True)
+        else:
+            continue
 
-        # 🎯 核心動作：精準挑選第 11, 12, 13 名
+        # 6. 🎯 核心選號：鎖定第 11, 12, 13 名
         try:
-            # iloc[10:13] 對應排行榜上的 index 10, 11, 12
-            pick_rows = rank_df.iloc[10:13]
-            recs = pick_rows["號碼"].tolist()
+            # iloc[10:13] 代表排名第 11, 12, 13 名的 row
+            picked_nums = rank_df.iloc[10:13]["號碼"].tolist()
         except:
             continue
             
-        recs_set = set([str(n).zfill(2) for n in recs])
+        recs_set = set([str(n).zfill(2) for n in picked_nums])
         
-        # 2. 驗證中獎結果 (下一期 20 碼)
-        draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(actual_next_draw[c], errors='coerce') >= 1]
-        hits = recs_set.intersection(set(draw))
+        # 7. 驗證中獎結果
+        draw_nums = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(actual_next_draw[c], errors='coerce') >= 1]
+        hits = recs_set.intersection(set(draw_nums))
         hit_count = len(hits)
         
+        # 8. 紀錄結果
         results.append({
             "期數": df.index[i-1],
-            "建議號碼(11-13名)": ", ".join(recs),
-            "命中號碼": ", ".join(list(hits)) if hits else "無",
+            "建議號碼(11-13)": ", ".join(picked_nums),
+            "命中詳情": ", ".join(list(hits)) if hits else "無",
             "最高單期命中": hit_count,
-            "回測權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
+            "回測權重": f"鄰{test_weights['neighbor']}/趨{test_weights['trend']}/流{test_weights['flow']}/遺{test_weights['omit']}",
             "三星成功": 1 if hit_count == 3 else 0,
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
