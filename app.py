@@ -435,6 +435,58 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
             
     return top_3, scores
 
+def get_global_ranking(df, omissions, interval_stats, weights):
+    import pandas as pd
+    
+    # 1. 取得最新一期的開獎號碼 (用於計算鄰居連動)
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    last_draw_row = df.iloc[0] # 取得第一列(最新一期)
+    last_draw_nums = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
+    
+    analysis_data = []
+    
+    # 2. 遍歷 01 到 80 號進行評分
+    for i in range(1, 81):
+        num_str = str(i).zfill(2)
+        num_int = int(i)
+        
+        # --- A. 遺漏分 (愈久沒開，基礎分愈高) ---
+        omit_val = omissions.get(num_str, 0)
+        s_omit = omit_val * weights['omit']
+        
+        # --- B. 動態連動分 (鄰居球邏輯) ---
+        # 檢查這顆球的左鄰右舍 (n-1, n+1) 是否在上一期開出
+        neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
+        # 計算交集數量 (0, 1, 或 2)
+        hit_neighbors = len(neighbors.intersection(last_draw_nums))
+        s_neighbor = hit_neighbors * weights['neighbor'] * 2  # 加強權重感應
+        
+        # --- C. 區間趨勢分 ---
+        # 判斷屬於哪個區間 (1-10, 11-20...)
+        interval_idx = (num_int - 1) // 10
+        interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
+        current_key = interval_keys[interval_idx]
+        s_trend = interval_stats.get(current_key, 0) * weights['trend']
+        
+        # --- D. 總分彙整 ---
+        total_score = s_omit + s_neighbor + s_trend
+        
+        analysis_data.append({
+            "號碼": num_str,
+            "總得分": round(total_score, 2),
+            "遺漏貢獻": round(s_omit, 2),
+            "連動潛力": "🔥 強" if hit_neighbors > 0 else "---",
+            "連動得分": round(s_neighbor, 2),
+            "趨勢得分": round(s_trend, 2),
+            "目前遺漏": omit_val
+        })
+    
+    # 3. 轉為 DataFrame 並排序
+    rank_df = pd.DataFrame(analysis_data).sort_values(by="總得分", ascending=False).reset_index(drop=True)
+    rank_df.index += 1 # 排名從 1 開始
+    
+    return rank_df
+
 def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
     """
     回測專用選號邏輯：排除 Session State，支援外部權重傳入。
@@ -1045,6 +1097,7 @@ with tab3:
             score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
             score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
             st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
+			
 
         # --- 系統控制 ---
         with st.expander("⚙️ 系統控制與追蹤"):
@@ -1078,6 +1131,43 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+
+st.header("📊 雙軌數據分析中心")
+st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
+
+col1, col2 = st.columns([1, 1.8])
+
+with col1:
+    st.subheader("🎯 方案一：Smart Pick 3")
+    # 執行原本的選號邏輯
+    recs, _ = smart_pick_3(df, omissions, interval_stats, None, weights=sidebar_weights)
+    
+    st.markdown("---")
+    for r in recs:
+        st.markdown(f"### 📍 推薦號碼：`{r}`")
+    st.markdown("---")
+    st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
+
+with col2:
+    st.subheader("📈 方案二：全號碼競爭力排行榜")
+    
+    # 執行強化版全域排名
+    rank_df = get_global_ranking(df, omissions, interval_stats, sidebar_weights)
+    
+    # 快速摘要
+    top_5 = rank_df.head(5)["號碼"].tolist()
+    bottom_5 = rank_df.tail(5)["號碼"].tolist()
+    
+    c1, c2 = st.columns(2)
+    c1.success(f"🔝 潛力前五：{', '.join(top_5)}")
+    c2.error(f"🗑️ 建議避雷：{', '.join(bottom_5)}")
+    
+    # 顯示完整資料表
+    st.dataframe(
+        rank_df.style.background_gradient(subset=['總得分'], cmap='YlOrRd'),
+        use_container_width=True,
+        height=450
+    )
 
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測 (過去 50 期)")
