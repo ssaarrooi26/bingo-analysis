@@ -665,30 +665,38 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
     results = []
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 執行 50 期回測，window=1 (直擊模式)
+    # 執行 50 期回測
     test_range = 50
     for i in range(1, test_range + 1):
         if i + 150 >= len(df): break
         
-        # 模擬當時看到的 150 期歷史
-        current_df = df.iloc[i:i+150]
+        # 模擬當時看到的 150 期歷史視窗
+        current_df = df.iloc[i : i + 150]
         actual_next_draw = df.iloc[i-1]
         
-        # 取得當期權重 (包含 AI 自動校準邏輯)
+        # --- ⚡ 關鍵修正 1: 權重處理邏輯 ---
+        # 如果不使用 AI，則嚴格使用側邊欄傳入的 base_weights
         dynamic_weights = base_weights.copy()
-        if use_ai:
-            # 這裡簡化呼叫，實際執行時會帶入你原本的盤勢偵測邏輯
-            dynamic_weights = {'neighbor': 4.0, 'omit': 4.0, 'trend': 4.0, 'flow': 4.0} # 範例平衡權重
-            
-        # 1. 取得全域排名 (使用先前寫好的函式)
-        # 注意：這裡需要傳入計算好的 omissions 與 interval_stats
-        # 為了效能，這裡直接呼叫核心評分邏輯
-        rank_df = get_global_ranking(current_df, {}, {}, dynamic_weights) 
         
-        # ⚡ 關鍵修改：挑選排名 11, 12, 13 的號碼
+        if use_ai:
+            # 這裡應呼叫你原本主程式中的偵測邏輯，而不是給死板的 4.0
+            # 這裡暫時保留邏輯架構，但確保它不會在非 AI 模式下啟動
+            # (建議：若要精準回測 AI，此處應置入你的「盤勢偵測碼」)
+            pass 
+
+        # --- ⚡ 關鍵修正 2: 必須計算遺漏與區間統計，排名才會正確 ---
+        # 否則 get_global_ranking 拿到空資料，評分會變 0
+        current_omissions = calculate_omission(current_df, ball_cols) # 確保你有此函式
+        current_intervals = get_interval_stats(current_df)           # 確保你有此函式
+        
+        # 取得全域排名
+        rank_df = get_global_ranking(current_df, current_omissions, current_intervals, dynamic_weights) 
+        
+        # 挑選排名 11, 12, 13 的號碼
         try:
-            recs = rank_df.iloc[10:13]["號碼"].tolist() # index 10-12 即為排名 11-13
-        except:
+            # 使用 iloc[10:13] 抓取第 11, 12, 13 名
+            recs = rank_df.iloc[10:13]["號碼"].tolist() 
+        except Exception as e:
             continue
             
         recs_set = set([str(n).zfill(2) for n in recs])
@@ -703,7 +711,7 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
             "建議號碼(11-13名)": ", ".join(recs),
             "命中號碼": ", ".join(list(hits)) if hits else "無",
             "最高單期命中": hit_count,
-			"最終權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
+            "最終權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
             "三星成功": 1 if hit_count == 3 else 0,
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
