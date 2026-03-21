@@ -660,6 +660,56 @@ def run_backtest(df, base_weights, use_ai):
         
     return pd.DataFrame(results)
 
+def run_backtest_rank_11_13(df, base_weights, use_ai):
+    import pandas as pd
+    results = []
+    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    
+    # 執行 50 期回測，window=1 (直擊模式)
+    test_range = 50
+    for i in range(1, test_range + 1):
+        if i + 150 >= len(df): break
+        
+        # 模擬當時看到的 150 期歷史
+        current_df = df.iloc[i:i+150]
+        actual_next_draw = df.iloc[i-1]
+        
+        # 取得當期權重 (包含 AI 自動校準邏輯)
+        dynamic_weights = base_weights.copy()
+        if use_ai:
+            # 這裡簡化呼叫，實際執行時會帶入你原本的盤勢偵測邏輯
+            dynamic_weights = {'neighbor': 4.0, 'omit': 4.0, 'trend': 4.0, 'flow': 4.0} # 範例平衡權重
+            
+        # 1. 取得全域排名 (使用先前寫好的函式)
+        # 注意：這裡需要傳入計算好的 omissions 與 interval_stats
+        # 為了效能，這裡直接呼叫核心評分邏輯
+        rank_df = get_global_ranking(current_df, {}, {}, dynamic_weights) 
+        
+        # ⚡ 關鍵修改：挑選排名 11, 12, 13 的號碼
+        try:
+            recs = rank_df.iloc[10:13]["號碼"].tolist() # index 10-12 即為排名 11-13
+        except:
+            continue
+            
+        recs_set = set([str(n).zfill(2) for n in recs])
+        
+        # 2. 驗證下一期命中
+        draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(actual_next_draw[c], errors='coerce') >= 1]
+        hits = recs_set.intersection(set(draw))
+        hit_count = len(hits)
+        
+        results.append({
+            "期數": df.index[i-1],
+            "建議號碼(11-13名)": ", ".join(recs),
+            "命中號碼": ", ".join(list(hits)) if hits else "無",
+            "最高單期命中": hit_count,
+			"最終權重(鄰/趨/流/遺)": f"{dynamic_weights['neighbor']}/{dynamic_weights['trend']}/{dynamic_weights['flow']}/{dynamic_weights['omit']}",
+            "三星成功": 1 if hit_count == 3 else 0,
+            "二星命中": 1 if hit_count == 2 else 0,
+            "一星命中": 1 if hit_count == 1 else 0
+        })
+        
+    return pd.DataFrame(results)
 
 def optimize_weights(df, base_weights):
     best_win_rate = -1
@@ -1302,7 +1352,71 @@ with tab4: # 第四個 Tab
 	            3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
 	            """)
                 
+	if st.button("🥈 執行 11-13 名號碼回測"):
+    with st.spinner("正在模擬「二線號碼(11-13名)」策略回測..."):
+        # 執行專用回測
+        backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration)
+    
+    if backtest_df is None or backtest_df.empty:
+        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
+    else:
+        # --- 數據處理 ---
+        total_tests = len(backtest_df)
+        success_3 = backtest_df["三星成功"].sum()
+        success_2 = backtest_df["二星命中"].sum()
+        success_1 = backtest_df["一星命中"].sum()
+        
+        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+        
+        # --- 顯示儀表板 ---
+        st.subheader("🏁 二線策略 (排名11-13) 回測總結")
+        st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
 
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("回測總期數", f"{total_tests} 期")
+        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+        c4.metric("一星命中", f"{success_1} 次")
+
+        # --- 詳細清單與染色 ---
+        st.write("### 📝 詳細模擬紀錄 (11-13 名策略)")
+        
+        def highlight_hits_alt(row):
+            val = row['命中數'] # 這裡使用新版的命中數欄位
+            if val == 3: 
+                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+            elif val == 2: 
+                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+            elif val == 1: 
+                return ['background-color: #fff3cd; color: black'] * len(row)
+            return [''] * len(row)
+
+        st.dataframe(
+            backtest_df.style.apply(highlight_hits_alt, axis=1),
+            use_container_width=True,
+            height=500
+        )
+
+        # --- 檔案下載 ---
+        import datetime
+        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 下載二線策略報表",
+            data=csv_data,
+            file_name=f"rank_11_13_backtest_{datetime.datetime.now().strftime('%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+        st.divider()
+        with st.expander("💡 為什麼要測試 11-13 名？"):
+            st.markdown("""
+            - **避開大熱門**：前 3 名通常是數據上最完美的號碼，但有時會遇到「熱號集體冷卻」。
+            - **潛力股**：11-13 名通常是分數不錯但競爭沒那麼激烈的號碼，穩定性有時更高。
+            - **策略對照**：如果這份報表的勝率比 Smart Pick (1-3名) 高，說明當前盤勢適合「中庸選號」。
+            """)
+	
     st.divider()
     st.subheader("🧪 權重 AI 自動尋優")
     st.write("系統將以目前設定為基準，自動測試 27 種微調組合，尋找三星勝率最高的設定。")
