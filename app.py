@@ -1385,7 +1385,7 @@ if st.button("🥈 執行 11-13 名號碼回測"):
         
         # 定義專用的染色函式（避免與原本的變數衝突）
         def highlight_rank_hits(row):
-            val = row['命中數']
+            val = row['最高單期命中']
             if val == 3: 
                 return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
             elif val == 2: 
