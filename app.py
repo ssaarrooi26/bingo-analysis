@@ -329,8 +329,12 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
         
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
+    # --- ⚡ 追加功能：限制分析視野為 150 期 (防止斷層偏差) ---
+    analysis_window = 150
+    valid_df = df.head(analysis_window)
+    
     # --- 關鍵修正：精準取得上期號碼 (必須大於等於 1) ---
-    last_draw_row = df.iloc[0]
+    last_draw_row = valid_df.iloc[0] # 使用限制後的資料集
     last_draw_nums = []
     for n in ball_cols:
         val = pd.to_numeric(last_draw_row[n], errors='coerce')
@@ -355,10 +359,10 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
         except:
             continue
 
-    # 連動響應 (分析最近 50 期)
-    limit = min(len(df)-1, 50)
+    # 連動響應 (分析最近 50 期，已包含在 150 期安全區內)
+    limit = min(len(valid_df)-1, 50) 
     for i in range(limit):
-        hist_row = df.iloc[i+1]
+        hist_row = valid_df.iloc[i+1]
         # 取得該歷史期數開出的號碼
         hist_nums = [n for n in ball_cols if pd.to_numeric(hist_row[n], errors='coerce') >= 1]
         hist_set = set([str(n).zfill(2) for n in hist_nums])
@@ -367,7 +371,7 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
         if hist_set.intersection(set(last_draw_nums)):
             weight = weights['trend'] if i < 10 else 1.0
             # 該期的「前一期」(即第 i 期) 開出的號碼視為潛力拖牌
-            potential_row = df.iloc[i]
+            potential_row = valid_df.iloc[i]
             for n in ball_cols:
                 if pd.to_numeric(potential_row[n], errors='coerce') >= 1:
                     n_str = str(n).zfill(2)
@@ -375,10 +379,21 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
                         scores[n_str] += weight
 
     # --- 維度二：遺漏節奏 ---
-    for num, o in omissions.items():
+    # --- ⚡ 追加功能：重新計算 150 期內的「短程遺漏」，確保與全域排名一致 ---
+    short_omissions = {}
+    for i in range(1, 81):
+        n_str = str(i).zfill(2)
+        m_count = 0
+        for _, row in valid_df.iterrows():
+            d = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+            if n_str in d: break
+            m_count += 1
+        short_omissions[n_str] = m_count
+
+    for num, o in short_omissions.items(): # 使用修正後的遺漏值
         n_str = str(num).zfill(2)
         if n_str in scores:
-            # 針對熱門遺漏值加分
+            # 針對熱門遺漏值加分 (3, 5, 8, 12 是常見的回補週期)
             if o in [3, 5, 8, 12]: 
                 scores[n_str] += weights['omit']
             
@@ -416,7 +431,7 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
     # --- 3. 排序與輸出 ---
     scored_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     
-    # 排除上期已開出的 20 碼
+    # 排除上期已開出的 20 碼 (避免連莊機率過低)
     final_candidates = [n[0] for n in scored_candidates if n[0] not in last_draw_nums]
     
     # 保險機制：如果過濾完沒號碼，就直接取最高分的前三個
@@ -438,31 +453,47 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
 def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
     
-    # 1. 取得最新一期的開獎號碼 (用於計算鄰居連動)
+    # --- ⚡ 關鍵修正：限制分析視野為 150 期 ---
+    # 這樣可以確保計算的是「當日/當前」的連續趨勢，不被過期數據干擾
+    analysis_window = 150
+    valid_df = df.head(analysis_window) 
+    
+    # 1. 取得最新一期的開獎號碼
     ball_cols = [c for c in df.columns if str(c).isdigit()]
-    last_draw_row = df.iloc[0] # 取得第一列(最新一期)
+    last_draw_row = df.iloc[0] 
     last_draw_nums = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
     
+    # 2. 重新計算「150期內遺漏值」(精準防斷層)
+    # 如果某顆球在 150 期內都沒開，最高遺漏值就只會是 150，不會爆表
+    short_omissions = {}
+    for i in range(1, 81):
+        num_str = str(i).zfill(2)
+        miss_count = 0
+        for _, row in valid_df.iterrows():
+            # 取得該行號碼
+            draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+            if num_str in draw:
+                break
+            miss_count += 1
+        short_omissions[num_str] = miss_count
+
     analysis_data = []
     
-    # 2. 遍歷 01 到 80 號進行評分
+    # 3. 遍歷 01 到 80 號進行評分
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         num_int = int(i)
         
-        # --- A. 遺漏分 (愈久沒開，基礎分愈高) ---
-        omit_val = omissions.get(num_str, 0)
+        # --- A. 遺漏分 (限定 150 期內) ---
+        omit_val = short_omissions.get(num_str, 0)
         s_omit = omit_val * weights['omit']
         
         # --- B. 動態連動分 (鄰居球邏輯) ---
-        # 檢查這顆球的左鄰右舍 (n-1, n+1) 是否在上一期開出
         neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
-        # 計算交集數量 (0, 1, 或 2)
         hit_neighbors = len(neighbors.intersection(last_draw_nums))
-        s_neighbor = hit_neighbors * weights['neighbor'] * 2  # 加強權重感應
+        s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
         # --- C. 區間趨勢分 ---
-        # 判斷屬於哪個區間 (1-10, 11-20...)
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
@@ -474,16 +505,14 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         analysis_data.append({
             "號碼": num_str,
             "總得分": round(total_score, 2),
-            "遺漏貢獻": round(s_omit, 2),
-            "連動潛力": "🔥 強" if hit_neighbors > 0 else "---",
-            "連動得分": round(s_neighbor, 2),
-            "趨勢得分": round(s_trend, 2),
-            "目前遺漏": omit_val
+            "連動": "🔥" if hit_neighbors > 0 else " ",
+            "150期遺漏": omit_val,  # 顯示更精確的標籤
+            "得分佔比": 0 # 供後續視覺化參考
         })
     
-    # 3. 轉為 DataFrame 並排序
+    # 4. 排序並產出 DataFrame
     rank_df = pd.DataFrame(analysis_data).sort_values(by="總得分", ascending=False).reset_index(drop=True)
-    rank_df.index += 1 # 排名從 1 開始
+    rank_df.index += 1 
     
     return rank_df
 
