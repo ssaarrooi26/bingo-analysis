@@ -1352,9 +1352,10 @@ with tab4: # 第四個 Tab
 	            3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
 	            """)
                 
-	if st.button("🥈 執行 11-13 名號碼回測"):
+    
+if st.button("🥈 執行 11-13 名號碼回測"):
     with st.spinner("正在模擬「二線號碼(11-13名)」策略回測..."):
-        # 執行專用回測
+        # 執行專用回測：注意這裡改用 rank_11_13 版本
         backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration)
     
     if backtest_df is None or backtest_df.empty:
@@ -1382,8 +1383,9 @@ with tab4: # 第四個 Tab
         # --- 詳細清單與染色 ---
         st.write("### 📝 詳細模擬紀錄 (11-13 名策略)")
         
-        def highlight_hits_alt(row):
-            val = row['命中數'] # 這裡使用新版的命中數欄位
+        # 定義專用的染色函式（避免與原本的變數衝突）
+        def highlight_rank_hits(row):
+            val = row['命中數']
             if val == 3: 
                 return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
             elif val == 2: 
@@ -1393,29 +1395,10 @@ with tab4: # 第四個 Tab
             return [''] * len(row)
 
         st.dataframe(
-            backtest_df.style.apply(highlight_hits_alt, axis=1),
+            backtest_df.style.apply(highlight_rank_hits, axis=1),
             use_container_width=True,
             height=500
-        )
-
-        # --- 檔案下載 ---
-        import datetime
-        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="📥 下載二線策略報表",
-            data=csv_data,
-            file_name=f"rank_11_13_backtest_{datetime.datetime.now().strftime('%m%d_%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-        st.divider()
-        with st.expander("💡 為什麼要測試 11-13 名？"):
-            st.markdown("""
-            - **避開大熱門**：前 3 名通常是數據上最完美的號碼，但有時會遇到「熱號集體冷卻」。
-            - **潛力股**：11-13 名通常是分數不錯但競爭沒那麼激烈的號碼，穩定性有時更高。
-            - **策略對照**：如果這份報表的勝率比 Smart Pick (1-3名) 高，說明當前盤勢適合「中庸選號」。
-            """)
+        )	
 	
     st.divider()
     st.subheader("🧪 權重 AI 自動尋優")
