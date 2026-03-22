@@ -660,79 +660,83 @@ def run_backtest(df, base_weights, use_ai):
         
     return pd.DataFrame(results)
 
-def run_backtest_rank_11_13(df, base_weights, use_ai):
+def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
     import pandas as pd
-    results = []
+    results = [] # 存放每一期回測結果的清單
     
-    # 確保抓取原始期號欄位
+    # 確保抓取原始期號欄位 (從 CSV 中尋找可能的標題名稱)
     id_col = next((c for c in ['期號', '期數', 'DrawNo'] if c in df.columns), None)
+    # 篩選出純數字的欄位名稱 (即 01-80 號碼球)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 執行 50 期回測
+    # 執行 50 期回測 (從最新一期往回推算)
     test_range = 50
     for i in range(0, test_range):
-        # 假設 i=0 是最新一期 (剛開出那一期)
-        # 我們要預測的是 df.iloc[i]
-        # 我們能用的歷史資料必須從 df.iloc[i+1] 開始往後數 150 期
+        # 模擬時間軸：i=0 是目前最新開出的那一期 (目標期)，i+1 之後是當時的歷史資料
+        target_row = df.iloc[i]          # 這是我們用來驗證「預測準不準」的目標期
+        history_df = df.iloc[i+1 : i+151] # 模擬當時看到的 150 期歷史視窗，確保不看到未來數據
         
-        target_row = df.iloc[i]          # 目標期 (驗證用)
-        history_df = df.iloc[i+1 : i+151] # 歷史視窗 (模擬當時玩家看到的畫面)
+        # 若剩餘歷史資料不足 150 期則停止回測
+        if len(history_df) < 150: break 
         
-        if len(history_df) < 150: break # 資料不足則跳過
-        
-        # 1. 取得當時的權重 (側邊欄固定值)
+        # 1. 取得當時的權重 (始終帶入側邊欄目前的設定值)
         test_weights = base_weights.copy()
 
-        # 2. ⚡ 關鍵：模擬當時看到的「區間熱度」
-        # 只看 history_df (不包含 target_row)
+        # 2. ⚡ 關鍵：根據歷史視窗重新模擬當時看到的「區間熱度」
         temp_interval_stats = {}
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
-        recent_20_history = history_df.head(20) 
+        recent_20_history = history_df.head(20) # 僅計算當時最新 20 期的趨勢
         
         for key in interval_keys:
             start, end = map(int, key.split('-'))
             count = 0
             for _, row in recent_20_history.iterrows():
+                # 加總該區間在單期中出現的次數
                 count += sum(1 for n in ball_cols if start <= int(n) <= end and pd.to_numeric(row[n], errors='coerce') >= 1)
+            # 計算平均每期產出次數
             temp_interval_stats[key] = count / 20.0
 
-        # 3. 🔍 呼叫全域排名 (傳入歷史視窗)
-        # 注意：get_global_ranking 內部會依 history_df 計算遺漏值與鄰居球
+        # 3. 🔍 呼叫全域排名 (傳入模擬的歷史視窗與動態區間分)
         rank_df_raw = get_global_ranking(history_df, {}, temp_interval_stats, test_weights)
         
-        # 4. 排序並取出 11-13 名
+        # 4. 排序並取出指定的排名部位
         if not rank_df_raw.empty:
+            # 確保總得分為數值型態，解決 ValueError 排序崩潰問題
             rank_df_raw["總得分"] = pd.to_numeric(rank_df_raw["總得分"], errors='coerce').fillna(0)
+            # 依照分數由高到低排序
             rank_df = rank_df_raw.sort_values(by="總得分", ascending=False).reset_index(drop=True)
             
             try:
-                picked_nums = rank_df.iloc[10:13]["號碼"].tolist()
+                # 🎯 核心修改：使用 iloc 切片取出自定義排名
+                # iloc 是從 0 開始，所以第 11 名對應 index 10。切片 [10:13] 代表 10, 11, 12 位
+                picked_nums = rank_df.iloc[start_rank-1 : end_rank]["號碼"].tolist()
             except:
                 continue
         else:
             continue
             
-        # 5. 驗證中獎 (比對 target_row)
+        # 5. 驗證中獎 (將選出的號碼與 target_row 實際開獎號比對)
         recs_set = set([str(n).zfill(2) for n in picked_nums])
         draw_nums = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(target_row[c], errors='coerce') >= 1]
-        hits = recs_set.intersection(set(draw_nums))
+        hits = recs_set.intersection(set(draw_nums)) # 取得交集 (即中獎號)
         hit_count = len(hits)
         
-        # 6. 取得期號
+        # 6. 取得原始期號用於顯示
         display_period = target_row[id_col] if id_col else df.index[i]
 
+        # 將結果封裝成字典，保留原有的欄位名稱確保染色函式相容
         results.append({
             "回測序號": f"#{str(i+1).zfill(2)}", 
             "原始期號": display_period,
-            "建議號碼(11-13)": ", ".join(picked_nums),
+            f"建議號碼({start_r}-{end_r})": ", ".join(picked_nums), # 動態顯示排名標籤
             "命中詳情": ", ".join(list(hits)) if hits else "無",
-            "最高單期命中": hit_count,
+            "最高單期命中": hit_count, # 保留原名稱
             "三星成功": 1 if hit_count == 3 else 0,
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
         })
         
-    return pd.DataFrame(results)
+    return pd.DataFrame(results) # 轉回 DataFrame 供 Streamlit 顯示
 
 def optimize_weights(df, base_weights):
     best_win_rate = -1
@@ -1376,10 +1380,11 @@ with tab4: # 第四個 Tab
 	            """)
                 
     
-if st.button("🥈 執行 11-13 名號碼回測"):
-    with st.spinner("正在模擬「二線號碼(11-13名)」策略回測..."):
-        # 執行專用回測：注意這裡改用 rank_11_13 版本
-        backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration)
+# 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
+if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
+    with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
+        # 執行回測：傳入自定義的 start_r 與 end_r
+        backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
     
     if backtest_df is None or backtest_df.empty:
         st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
@@ -1394,7 +1399,7 @@ if st.button("🥈 執行 11-13 名號碼回測"):
         win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
         
         # --- 顯示儀表板 ---
-        st.subheader("🏁 二線策略 (排名11-13) 回測總結")
+        st.subheader(f"🏁 排名 {start_r}-{end_r} 策略回測總結")
         st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
 
         c1, c2, c3, c4 = st.columns(4)
@@ -1404,9 +1409,9 @@ if st.button("🥈 執行 11-13 名號碼回測"):
         c4.metric("一星命中", f"{success_1} 次")
 
         # --- 詳細清單與染色 ---
-        st.write("### 📝 詳細模擬紀錄 (11-13 名策略)")
+        st.write(f"### 📝 詳細模擬紀錄 ({start_r}-{end_r} 名策略)")
         
-        # 定義專用的染色函式（避免與原本的變數衝突）
+        # 定義專用的染色函式（維持原狀，使用 '最高單期命中'）
         def highlight_rank_hits(row):
             val = row['最高單期命中']
             if val == 3: 
@@ -1421,7 +1426,11 @@ if st.button("🥈 執行 11-13 名號碼回測"):
             backtest_df.style.apply(highlight_rank_hits, axis=1),
             use_container_width=True,
             height=500
-        )	
+        )
+
+	
+
+
 	
     st.divider()
     st.subheader("🧪 權重 AI 自動尋優")
