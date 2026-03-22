@@ -725,7 +725,7 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
             "原始期號": display_period,   # 👈 這裡現在會顯示如 113065432
             "建議號碼(11-13)": ", ".join(picked_nums),
             "命中詳情": ", ".join(list(hits)) if hits else "無",
-            "最高單期命中數": hit_count,
+            "最高單期命中": hit_count,
             "三星成功": 1 if hit_count == 3 else 0,
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
