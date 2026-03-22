@@ -463,9 +463,11 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     valid_df = df.head(analysis_window).copy() 
     
     # 1. 取得最新一期的開獎號碼 (計算鄰居球基準)
-    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    # 🚀 修正：強制將標題轉為字串並補零，確保 "01" 格式與搜尋變數完全對齊
+    ball_cols = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()]
     last_draw_row = valid_df.iloc[0] 
-    last_draw_nums = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
+    # 🚀 修正：對比時同樣確保欄位索引與補零後的名稱一致
+    last_draw_nums = set([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
     
     # 2. 重新計算「150期內遺漏值」
     short_omissions = {}
@@ -473,18 +475,19 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         num_str = str(i).zfill(2)
         miss_count = 0
         for _, row in valid_df.iterrows():
-            draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+            # 🚀 修正：掃描每一期開獎時，標題判定邏輯與步驟 1 保持絕對對稱
+            draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
             if num_str in draw:
                 break
             miss_count += 1
         short_omissions[num_str] = miss_count
 
     # --- 🚀 新增項目：計算「近期熱度微擾」 (Recent Frequency Bias) ---
-    # 權重名稱：近期熱度微擾。用於打破主分相同時的排序僵局。
     recent_50_df = valid_df.head(50)
     freq_map = {}
     for _, row in recent_50_df.iterrows():
-        draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+        # 🚀 修正：頻率統計之標題處理與上述邏輯統一，消除 1 vs 01 的歧義
+        draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
         for n in draw:
             freq_map[n] = freq_map.get(n, 0) + 1
 
@@ -505,15 +508,12 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
         # --- C. 區間趨勢分 (權重名稱: trend) ---
-        # ⚡ 導入說明：直接引用外部傳入已修正的 interval_stats 字典
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
-        # 使用 .get() 確保安全取值，對齊外部傳入的 20 期平均字典
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
         
         # --- 🚀 新增項目：微擾動得分計算 ---
-        # 邏輯：(50期出現次數 / 50) * 0.1。微小但足以打破平手。
         occ_count = freq_map.get(num_str, 0)
         s_bias = (occ_count / 50.0) * 0.1
         
@@ -522,17 +522,20 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         
         analysis_data.append({
             "號碼": num_str,
-            "總得分": round(total_score, 4), # 提升精確度至萬分之一以顯現微擾差異
+            "總得分": round(total_score, 4), 
             "連動": "🔥" if hit_neighbors > 0 else " ",
             "150期遺漏": omit_val,
             "得分佔比": 0 
         })
     
+    # === 🐞 除錯偵測點：檢查是否有分數完全相同且號碼接近的狀況 ===
+    # 這裡不更動數據，僅供你在後台 print 觀察 (若有需要可解除註解)
+    # print(f"DEBUG: 排名基準期鄰居球: {last_draw_nums}")
+
     # 4. 排序並產出 DataFrame
-    # ⚡ 導入說明：採用雙重排序，確保回測與即時畫面的「穩定一致性」
     rank_df = pd.DataFrame(analysis_data).sort_values(
         by=["總得分", "號碼"], 
-        ascending=[False, True] # 分數高者在前，分數相同則號碼小者在前
+        ascending=[False, True] 
     ).reset_index(drop=True)
     
     # 補算得分佔比 (不影響排序)
