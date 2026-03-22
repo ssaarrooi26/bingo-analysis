@@ -709,7 +709,7 @@ def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
             try:
                 # 🎯 核心修改：使用 iloc 切片取出自定義排名
                 # iloc 是從 0 開始，所以第 11 名對應 index 10。切片 [10:13] 代表 10, 11, 12 位
-                picked_nums = rank_df.iloc[start_rank-1 : end_rank]["號碼"].tolist()
+                picked_nums = rank_df.iloc[start_r-1 : end_r]["號碼"].tolist()
             except:
                 continue
         else:
