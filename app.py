@@ -453,63 +453,89 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
 def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
     
-    # --- ⚡ 關鍵修正 1：不要在函式內部再次切片 ---
-    # 讓外部傳入什麼，就計算什麼。這能確保回測時傳入的 150 期被完整使用。
-    valid_df = df 
+    # --- ⚡ 邏輯維持：限制分析視野為 150 期 ---
+    analysis_window = 150
+    valid_df = df.head(analysis_window).copy() 
     
-    # 1. 取得「參考期」的開獎號碼 (用於計算鄰居球)
-    # 在回測中，這會是 target_row 的前一期 (即 history_df 的第一筆)
+    # 1. 取得最新一期的開獎號碼 (計算鄰居球基準)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
-    last_draw_row = df.iloc[0] 
+    last_draw_row = valid_df.iloc[0] 
     last_draw_nums = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
     
-    # 2. 遺漏值計算
+    # 2. 重新計算「150期內遺漏值」
     short_omissions = {}
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         miss_count = 0
         for _, row in valid_df.iterrows():
-            # 取得該行實際中獎號碼
             draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
             if num_str in draw:
                 break
             miss_count += 1
         short_omissions[num_str] = miss_count
 
+    # --- 🚀 新增功能預備：計算「近期熱度微擾」所需數據 ---
+    # 功能名稱：近期熱度微擾 (Recent Frequency Bias)
+    # 邏輯：分析過去 50 期出現頻率，用於打破總分相同時的排序僵局
+    recent_50_df = valid_df.head(50)
+    freq_map = {}
+    for _, row in recent_50_df.iterrows():
+        draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
+        for n in draw:
+            freq_map[n] = freq_map.get(n, 0) + 1
+
     analysis_data = []
     
-    # 3. 評分邏輯 (保持原樣，但確保穩定排序)
+    # 3. 遍歷 01 到 80 號進行評分
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         num_int = int(i)
         
+        # --- A. 遺漏分 (權重名稱: omit) ---
         omit_val = short_omissions.get(num_str, 0)
         s_omit = omit_val * weights['omit']
         
+        # --- B. 動態連動分 (權重名稱: neighbor) ---
         neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
         hit_neighbors = len(neighbors.intersection(last_draw_nums))
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
+        # --- C. 區間趨勢分 (權重名稱: trend) ---
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
         
-        total_score = s_omit + s_neighbor + s_trend
+        # --- 🚀 核心新增：計算微擾動得分 ---
+        # 權重名稱：近期熱度微擾 (Recent Frequency Bias)
+        # 計算方式：(50期內出現次數 / 50) * 0.1，最高加 0.1 分，不干擾主權重但能精準排序
+        occ_count = freq_map.get(num_str, 0)
+        s_bias = (occ_count / 50.0) * 0.1
+        
+        # --- D. 總分彙整 (包含微擾得分) ---
+        total_score = s_omit + s_neighbor + s_trend + s_bias
         
         analysis_data.append({
             "號碼": num_str,
-            "總得分": round(total_score, 2),
+            "總得分": round(total_score, 4), # 提升精確度以顯示微擾差異
             "連動": "🔥" if hit_neighbors > 0 else " ",
-            "150期遺漏": omit_val
+            "150期遺漏": omit_val,
+            "得分佔比": 0 # 預留位置
         })
     
-    # --- ⚡ 關鍵修正 2：增加第二排序因子 (號碼) ---
-    # 避免總得分相同時，Pandas 隨機排序導致回測與即時顯示不一致
+    # 4. 排序並產出 DataFrame
+    # 採用雙重排序：1. 總得分(含微擾) 由高到低 2. 號碼 由小到大 (絕對穩定性)
     rank_df = pd.DataFrame(analysis_data).sort_values(
         by=["總得分", "號碼"], 
         ascending=[False, True]
     ).reset_index(drop=True)
+    
+    # 補算得分佔比 (不影響排序)
+    total_sum = rank_df["總得分"].sum()
+    if total_sum > 0:
+        rank_df["得分佔比"] = (rank_df["總得分"] / total_sum * 100).round(2).astype(str) + "%"
+
+    rank_df.index += 1 
     
     return rank_df
 
