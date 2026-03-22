@@ -717,7 +717,7 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
 
         results.append({
             "回測序號": f"#{str(i).zfill(2)}", # 輔助序號 (01 為最新)
-            "原始期號": original_period_id,
+            "Bingo期號": original_period_id,
             "建議號碼(11-13)": ", ".join(picked_nums),
             "命中詳情": ", ".join(list(hits)) if hits else "無",
             "最高單期命中": hit_count,               
