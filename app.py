@@ -955,7 +955,7 @@ sidebar_weights = {
 st.sidebar.subheader("🤖 策略控制")
 use_ai_calibration = st.sidebar.checkbox(
     "開啟 AI 動態權重接管", 
-    value=True, 
+    value=False, 
     help="勾選時：系統自動偵測盤勢並強制覆蓋為專家權重。未勾選：完全採用上方手動設定。"
 )
 
