@@ -690,81 +690,76 @@ def run_backtest(df, base_weights, use_ai):
 
 def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
     import pandas as pd
-    results = [] # 存放每一期回測結果的清單
+    results = [] # 初始化空清單，用來儲存每一期回測的比對結果
     
-    # 確保抓取原始期號欄位 (從 CSV 中尋找可能的標題名稱)
+    # 自動偵測 CSV 中的期號欄位名稱（相容不同格式的標題）
     id_col = next((c for c in ['期號', '期數', 'DrawNo'] if c in df.columns), None)
-    # 篩選出純數字的欄位名稱 (即 01-80 號碼球)
+    # 擷取所有純數字標題的欄位（即代表 01-80 號碼球的數據列）
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 執行 50 期回測 (從最新一期往回推算)
-    test_range = 50
+    test_range = 50 # 設定往回追蹤的回測總期數
     for i in range(0, test_range):
-        # 模擬時間軸：i=0 是目前最新開出的那一期 (目標期)，i+1 之後是當時的歷史資料
-        target_row = df.iloc[i]          # 這是我們用來驗證「預測準不準」的目標期
-        history_df = df.iloc[i+1 : i+151] # 模擬當時看到的 150 期歷史視窗，確保不看到未來數據
+        # --- 模擬當時時間軸 ---
+        # i=0 代表最新一期，i=1 代表前一期。target_row 是我們要驗證「預測是否命中」的那一期。
+        target_row = df.iloc[i]          
+        # history_df 模擬當時開獎後的「歷史資料視野」，取該期之後的 150 期，確保不偷看未來數據
+        history_df = df.iloc[i+1 : i+151] 
         
-        # 若剩餘歷史資料不足 150 期則停止回測
+        # 如果剩餘的歷史資料不足 150 期，則無法進行精準評分，跳出迴圈
         if len(history_df) < 150: break 
         
-        # 1. 取得當時的權重 (始終帶入側邊欄目前的設定值)
+        # 1. 取得基礎權重
+        # 複製側邊欄傳入的權重設定，避免迴圈內的修改影響到原始變數
         test_weights = base_weights.copy()
 
-        # 2. ⚡ 關鍵：根據歷史視窗重新模擬當時看到的「區間熱度」
-        temp_interval_stats = {}
-        interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
-        recent_20_history = history_df.head(20) # 僅計算當時最新 20 期的趨勢
-        
-        for key in interval_keys:
-            start, end = map(int, key.split('-'))
-            count = 0
-            for _, row in recent_20_history.iterrows():
-                # 加總該區間在單期中出現的次數
-                count += sum(1 for n in ball_cols if start <= int(n) <= end and pd.to_numeric(row[n], errors='coerce') >= 1)
-            # 計算平均每期產出次數
-            temp_interval_stats[key] = count / 20.0
+        # 2. ⚡ 關鍵同步：取得當時的區間熱力數據
+        # 呼叫外部統一的 get_interval_stats 函式，傳入模擬的歷史視窗
+        # 這裡會得到一個「字典」格式的 20 期平均熱度，與 Tab 1 即時顯示完全一致
+        temp_interval_stats = get_interval_stats(history_df) 
 
-        # 3. 🔍 呼叫全域排名 (傳入模擬的歷史視窗與動態區間分)
-        rank_df_raw = get_global_ranking(history_df, {}, temp_interval_stats, test_weights)
+        # 3. 🔍 執行核心排名計算
+        # 將當時的歷史、空遺漏表、統計字典、權重傳入排名引擎
+        # 引擎內部會自動計算：遺漏分、連動分、趨勢分，以及「微擾動係數」
+        rank_df = get_global_ranking(history_df, {}, temp_interval_stats, test_weights)
         
-        # 4. 排序並取出指定的排名部位
-        if not rank_df_raw.empty:
-            # 確保總得分為數值型態，解決 ValueError 排序崩潰問題
-            rank_df_raw["總得分"] = pd.to_numeric(rank_df_raw["總得分"], errors='coerce').fillna(0)
-            # 依照分數由高到低排序
-            rank_df = rank_df_raw.sort_values(by="總得分", ascending=False).reset_index(drop=True)
-            
+        # 4. 🎯 精準擷取排名部位
+        if not rank_df.empty:
             try:
-                # 🎯 核心修改：使用 iloc 切片取出自定義排名
-                # iloc 是從 0 開始，所以第 11 名對應 index 10。切片 [10:13] 代表 10, 11, 12 位
+                # 直接利用 get_global_ranking 已經排好序（總得分 + 號碼順序）的結果
+                # 使用 iloc 進行切片。例如 start_r=11, end_r=13，會取 index 10 到 12 的資料
                 picked_nums = rank_df.iloc[start_r-1 : end_r]["號碼"].tolist()
             except:
+                # 若發生索引越界（例如號碼不足）則跳過此期
                 continue
         else:
             continue
             
-        # 5. 驗證中獎 (將選出的號碼與 target_row 實際開獎號比對)
+        # 5. 驗證中獎情況
+        # 將建議號碼補零至兩位數格式，建立集合（Set）以便進行交集運算
         recs_set = set([str(n).zfill(2) for n in picked_nums])
+        # 找出 target_row 中數值 >= 1 的欄位，即為該期實際開出的號碼
         draw_nums = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(target_row[c], errors='coerce') >= 1]
-        hits = recs_set.intersection(set(draw_nums)) # 取得交集 (即中獎號)
-        hit_count = len(hits)
+        # 使用 set.intersection 取得「命中號碼」
+        hits = recs_set.intersection(set(draw_nums))
+        hit_count = len(hits) # 計算總命中顆數
         
-        # 6. 取得原始期號用於顯示
+        # 6. 取得期號用於報表顯示
         display_period = target_row[id_col] if id_col else df.index[i]
 
-        # 將結果封裝成字典，保留原有的欄位名稱確保染色函式相容
+        # 將此期回測的所有詳情與命中指標封裝進字典
         results.append({
             "回測序號": f"#{str(i+1).zfill(2)}", 
             "原始期號": display_period,
-            f"建議號碼({start_r}-{end_r})": ", ".join(picked_nums), # 動態顯示排名標籤
+            f"建議號碼({start_r}-{end_r})": ", ".join(picked_nums), # 動態顯示當前測試的排名區間
             "命中詳情": ", ".join(list(hits)) if hits else "無",
-            "最高單期命中": hit_count, # 保留原名稱
-            "三星成功": 1 if hit_count == 3 else 0,
+            "最高單期命中": hit_count,
+            "三星成功": 1 if hit_count == 3 else 0, # 若命中 3 顆則標註為三星成功
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
         })
         
-    return pd.DataFrame(results) # 轉回 DataFrame 供 Streamlit 顯示
+    # 將所有期數的結果轉換為 DataFrame 格式回傳，方便 Streamlit 渲染表格與染色
+    return pd.DataFrame(results)
 
 def optimize_weights(df, base_weights):
     best_win_rate = -1
