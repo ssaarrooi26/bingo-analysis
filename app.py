@@ -663,23 +663,27 @@ def run_backtest(df, base_weights, use_ai):
 def run_backtest_rank_11_13(df, base_weights, use_ai):
     import pandas as pd
     results = []
+    
+    # --- ⚡ 關鍵修正：自動偵測期號欄位名稱 ---
+    # 檢查 CSV 中常見的期號欄位名稱
+    id_col = None
+    for col in ['期號', '期數', 'DrawNo', '開獎期號']:
+        if col in df.columns:
+            id_col = col
+            break
+    
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    # 執行 50 期回測
     test_range = 50
     for i in range(1, test_range + 1):
-        # 確保有 150 期的歷史視野
         if i + 150 >= len(df): break
         
-        # 1. 模擬歷史視窗
-        # i=1 時，取得第 1 期到第 151 期的資料來預測第 0 期(最新期)
         current_df = df.iloc[i : i + 150]
         actual_next_draw = df.iloc[i-1] 
         
-        # 2. 鎖定側邊欄權重
         test_weights = base_weights.copy()
 
-        # 3. 模擬當前區間熱度 (get_global_ranking 必要輸入)
+        # 模擬當時環境數據
         temp_interval_stats = {}
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         for key in interval_keys:
@@ -689,38 +693,39 @@ def run_backtest_rank_11_13(df, base_weights, use_ai):
                 count += sum(1 for n in ball_cols if start <= int(n) <= end and pd.to_numeric(row[n], errors='coerce') >= 1)
             temp_interval_stats[key] = count / 20.0
 
-        # 4. 🔍 呼叫全域排名 (使用你的 150 期視野邏輯)
+        # 🔍 執行全域排名
         rank_df_raw = get_global_ranking(current_df, {}, temp_interval_stats, test_weights)
         
-        # 5. 資料加固與排序
         if not rank_df_raw.empty:
             rank_df_raw["總得分"] = pd.to_numeric(rank_df_raw["總得分"], errors='coerce').fillna(0)
             rank_df = rank_df_raw.sort_values(by="總得分", ascending=False).reset_index(drop=True)
         else:
             continue
 
-        # 6. 🎯 挑選第 11, 12, 13 名
         try:
             picked_nums = rank_df.iloc[10:13]["號碼"].tolist()
         except:
             continue
             
         recs_set = set([str(n).zfill(2) for n in picked_nums])
-        
-        # 7. 驗證中獎結果
         draw_nums = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(actual_next_draw[c], errors='coerce') >= 1]
         hits = recs_set.intersection(set(draw_nums))
         hit_count = len(hits)
         
-        # --- ⚡ 關鍵修正：直接使用原始期號作為主標籤 ---
-        original_period_id = df.index[i-1] # 取得 DataFrame 的 Index (期號)
+        # --- ⚡ 關鍵修正：取得原始期號 ---
+        if id_col:
+            # 如果有找到期號欄位，直接取值
+            display_period = actual_next_draw[id_col]
+        else:
+            # 如果沒找到欄位，嘗試取 index 名稱（有時 index 會被設為期號）
+            display_period = df.index[i-1]
 
         results.append({
-            "回測序號": f"#{str(i).zfill(2)}", # 輔助序號 (01 為最新)
-            "Bingo期號": original_period_id,
+            "回測序號": f"#{str(i).zfill(2)}", 
+            "原始期號": display_period,   # 👈 這裡現在會顯示如 113065432
             "建議號碼(11-13)": ", ".join(picked_nums),
             "命中詳情": ", ".join(list(hits)) if hits else "無",
-            "最高單期命中": hit_count,               
+            "最高單期命中數": hit_count,
             "三星成功": 1 if hit_count == 3 else 0,
             "二星命中": 1 if hit_count == 2 else 0,
             "一星命中": 1 if hit_count == 1 else 0
