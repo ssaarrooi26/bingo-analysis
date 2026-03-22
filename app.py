@@ -1379,7 +1379,15 @@ with tab4: # 第四個 Tab
 	            3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
 	            """)
                 
-    
+# --- 1. 先定義變數 (確保按鈕執行前變數已存在) ---
+col_s, col_e = st.columns(2)
+with col_s:
+    # 這裡定義 start_r，預設值設為 11
+    start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
+with col_e:
+    # 這裡定義 end_r，預設值設為 13
+    end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
+
 # 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
 if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
     with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
