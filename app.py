@@ -453,24 +453,23 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
 def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
     
-    # --- ⚡ 關鍵修正：限制分析視野為 150 期 ---
-    # 這樣可以確保計算的是「當日/當前」的連續趨勢，不被過期數據干擾
-    analysis_window = 150
-    valid_df = df.head(analysis_window) 
+    # --- ⚡ 關鍵修正 1：不要在函式內部再次切片 ---
+    # 讓外部傳入什麼，就計算什麼。這能確保回測時傳入的 150 期被完整使用。
+    valid_df = df 
     
-    # 1. 取得最新一期的開獎號碼
+    # 1. 取得「參考期」的開獎號碼 (用於計算鄰居球)
+    # 在回測中，這會是 target_row 的前一期 (即 history_df 的第一筆)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     last_draw_row = df.iloc[0] 
     last_draw_nums = set([str(c).zfill(2) for c in ball_cols if pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
     
-    # 2. 重新計算「150期內遺漏值」(精準防斷層)
-    # 如果某顆球在 150 期內都沒開，最高遺漏值就只會是 150，不會爆表
+    # 2. 遺漏值計算
     short_omissions = {}
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         miss_count = 0
         for _, row in valid_df.iterrows():
-            # 取得該行號碼
+            # 取得該行實際中獎號碼
             draw = [str(c).zfill(2) for c in ball_cols if pd.to_numeric(row[c], errors='coerce') >= 1]
             if num_str in draw:
                 break
@@ -479,40 +478,38 @@ def get_global_ranking(df, omissions, interval_stats, weights):
 
     analysis_data = []
     
-    # 3. 遍歷 01 到 80 號進行評分
+    # 3. 評分邏輯 (保持原樣，但確保穩定排序)
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         num_int = int(i)
         
-        # --- A. 遺漏分 (限定 150 期內) ---
         omit_val = short_omissions.get(num_str, 0)
         s_omit = omit_val * weights['omit']
         
-        # --- B. 動態連動分 (鄰居球邏輯) ---
         neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
         hit_neighbors = len(neighbors.intersection(last_draw_nums))
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
-        # --- C. 區間趨勢分 ---
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
         
-        # --- D. 總分彙整 ---
         total_score = s_omit + s_neighbor + s_trend
         
         analysis_data.append({
             "號碼": num_str,
             "總得分": round(total_score, 2),
             "連動": "🔥" if hit_neighbors > 0 else " ",
-            "150期遺漏": omit_val,  # 顯示更精確的標籤
-            "得分佔比": 0 # 供後續視覺化參考
+            "150期遺漏": omit_val
         })
     
-    # 4. 排序並產出 DataFrame
-    rank_df = pd.DataFrame(analysis_data).sort_values(by="總得分", ascending=False).reset_index(drop=True)
-    rank_df.index += 1 
+    # --- ⚡ 關鍵修正 2：增加第二排序因子 (號碼) ---
+    # 避免總得分相同時，Pandas 隨機排序導致回測與即時顯示不一致
+    rank_df = pd.DataFrame(analysis_data).sort_values(
+        by=["總得分", "號碼"], 
+        ascending=[False, True]
+    ).reset_index(drop=True)
     
     return rank_df
 
