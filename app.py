@@ -203,24 +203,29 @@ except Exception as e:
 
 def get_interval_stats(df):
     """
-    計算區間熱力統計
+    計算區間熱力統計 (統一為 20 期平均模式)
     """
     intervals = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
     stats = {intv: 0 for intv in intervals}
-    last_draw = df.iloc[0]
+    
+    # 統一取 20 期
+    recent_20 = df.head(20)
     ball_cols = [c for c in df.columns if str(c).isdigit()]
     
-    for col in ball_cols:
-        val = last_draw[col]
-        if pd.notnull(val):
-            try:
+    for _, row in recent_20.iterrows():
+        for col in ball_cols:
+            val = row[col]
+            if pd.notnull(val) and pd.to_numeric(val, errors='coerce') >= 1:
                 num = int(val)
                 idx = (num - 1) // 10
                 if 0 <= idx < len(intervals):
                     stats[intervals[idx]] += 1
-            except:
-                continue
-    return pd.DataFrame([stats])
+                    
+    # 計算平均值
+    for key in stats:
+        stats[key] = stats[key] / 20.0
+        
+    return stats # 改回傳字典，方便 get_global_ranking 讀取
 
 # 遺漏期數統計
 def calculate_omission(df, target_numbers=None):
@@ -474,9 +479,8 @@ def get_global_ranking(df, omissions, interval_stats, weights):
             miss_count += 1
         short_omissions[num_str] = miss_count
 
-    # --- 🚀 新增功能預備：計算「近期熱度微擾」所需數據 ---
-    # 功能名稱：近期熱度微擾 (Recent Frequency Bias)
-    # 邏輯：分析過去 50 期出現頻率，用於打破總分相同時的排序僵局
+    # --- 🚀 新增項目：計算「近期熱度微擾」 (Recent Frequency Bias) ---
+    # 權重名稱：近期熱度微擾。用於打破主分相同時的排序僵局。
     recent_50_df = valid_df.head(50)
     freq_map = {}
     for _, row in recent_50_df.iterrows():
@@ -501,14 +505,15 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
         # --- C. 區間趨勢分 (權重名稱: trend) ---
+        # ⚡ 導入說明：直接引用外部傳入已修正的 interval_stats 字典
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
+        # 使用 .get() 確保安全取值，對齊外部傳入的 20 期平均字典
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
         
-        # --- 🚀 核心新增：計算微擾動得分 ---
-        # 權重名稱：近期熱度微擾 (Recent Frequency Bias)
-        # 計算方式：(50期內出現次數 / 50) * 0.1，最高加 0.1 分，不干擾主權重但能精準排序
+        # --- 🚀 新增項目：微擾動得分計算 ---
+        # 邏輯：(50期出現次數 / 50) * 0.1。微小但足以打破平手。
         occ_count = freq_map.get(num_str, 0)
         s_bias = (occ_count / 50.0) * 0.1
         
@@ -517,17 +522,17 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         
         analysis_data.append({
             "號碼": num_str,
-            "總得分": round(total_score, 4), # 提升精確度以顯示微擾差異
+            "總得分": round(total_score, 4), # 提升精確度至萬分之一以顯現微擾差異
             "連動": "🔥" if hit_neighbors > 0 else " ",
             "150期遺漏": omit_val,
-            "得分佔比": 0 # 預留位置
+            "得分佔比": 0 
         })
     
     # 4. 排序並產出 DataFrame
-    # 採用雙重排序：1. 總得分(含微擾) 由高到低 2. 號碼 由小到大 (絕對穩定性)
+    # ⚡ 導入說明：採用雙重排序，確保回測與即時畫面的「穩定一致性」
     rank_df = pd.DataFrame(analysis_data).sort_values(
         by=["總得分", "號碼"], 
-        ascending=[False, True]
+        ascending=[False, True] # 分數高者在前，分數相同則號碼小者在前
     ).reset_index(drop=True)
     
     # 補算得分佔比 (不影響排序)
