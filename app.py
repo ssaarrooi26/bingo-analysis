@@ -461,7 +461,8 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     # 1. 鎖定分析視野 (確保不論外部傳什麼，內部只看前 150 筆)
     analysis_window = 150
     valid_df = df.head(analysis_window).copy() 
-    
+
+    print(f"DEBUG: 當前計算基準期號: {valid_df.iloc[0].get('期號', 'n/a')}")
     # 2. 定義球號標題 (針對你改好的 01-80 格式)
     # 使用 sorted 確保標題順序在任何環境下都一致
     ball_cols = sorted([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()])
@@ -469,7 +470,6 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     # 3. 取得「基準期」開獎號碼 (用於計算鄰居球)
     # 關鍵：這是回測與即時介面最容易產生落差的地方
     last_draw_row = valid_df.iloc[0] 
-	print(f"DEBUG: 當前計算基準期號: {valid_df.iloc[0].get('期號', 'n/a')}")
     last_draw_nums = set()
     for col in df.columns:
         if str(col).strip().isdigit():
