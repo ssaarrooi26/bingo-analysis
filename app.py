@@ -458,66 +458,71 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
 def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
     
-    # --- ⚡ 邏輯維持：限制分析視野為 150 期 ---
+    # 1. 鎖定分析視野 (確保不論外部傳什麼，內部只看前 150 筆)
     analysis_window = 150
     valid_df = df.head(analysis_window).copy() 
     
-    # 1. 取得最新一期的開獎號碼 (計算鄰居球基準)
-    # 🚀 修正：強制將標題轉為字串並補零，確保 "01" 格式與搜尋變數完全對齊
-    ball_cols = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()]
-    last_draw_row = valid_df.iloc[0] 
-    # 🚀 修正：對比時同樣確保欄位索引與補零後的名稱一致
-    last_draw_nums = set([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(last_draw_row[c], errors='coerce') >= 1])
+    # 2. 定義球號標題 (針對你改好的 01-80 格式)
+    # 使用 sorted 確保標題順序在任何環境下都一致
+    ball_cols = sorted([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()])
     
-    # 2. 重新計算「150期內遺漏值」
+    # 3. 取得「基準期」開獎號碼 (用於計算鄰居球)
+    # 關鍵：這是回測與即時介面最容易產生落差的地方
+    last_draw_row = valid_df.iloc[0] 
+    last_draw_nums = set()
+    for col in df.columns:
+        if str(col).strip().isdigit():
+            val = pd.to_numeric(last_draw_row[col], errors='coerce')
+            if val >= 1:
+                last_draw_nums.add(str(col).zfill(2))
+    
+    # 4. 重新計算「150期內遺漏值」
     short_omissions = {}
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         miss_count = 0
         for _, row in valid_df.iterrows():
-            # 🚀 修正：掃描每一期開獎時，標題判定邏輯與步驟 1 保持絕對對稱
+            # 建立當期開獎集合
             draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
             if num_str in draw:
                 break
             miss_count += 1
         short_omissions[num_str] = miss_count
 
-    # --- 🚀 新增項目：計算「近期熱度微擾」 (Recent Frequency Bias) ---
+    # 5. 計算「50期頻率微擾」
     recent_50_df = valid_df.head(50)
     freq_map = {}
     for _, row in recent_50_df.iterrows():
-        # 🚀 修正：頻率統計之標題處理與上述邏輯統一，消除 1 vs 01 的歧義
         draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
         for n in draw:
             freq_map[n] = freq_map.get(n, 0) + 1
 
     analysis_data = []
     
-    # 3. 遍歷 01 到 80 號進行評分
+    # 6. 核心評分循環
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         num_int = int(i)
         
-        # --- A. 遺漏分 (權重名稱: omit) ---
+        # A. 遺漏分
         omit_val = short_omissions.get(num_str, 0)
         s_omit = omit_val * weights['omit']
         
-        # --- B. 動態連動分 (權重名稱: neighbor) ---
+        # B. 動態連動分 (鄰居球)
         neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
         hit_neighbors = len(neighbors.intersection(last_draw_nums))
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
-        # --- C. 區間趨勢分 (權重名稱: trend) ---
+        # C. 區間趨勢分 (由外部傳入的 20期平均字典)
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
         
-        # --- 🚀 新增項目：微擾動得分計算 ---
+        # D. 微擾動 (打破平手)
         occ_count = freq_map.get(num_str, 0)
         s_bias = (occ_count / 50.0) * 0.1
         
-        # --- D. 總分彙整 (包含微擾得分) ---
         total_score = s_omit + s_neighbor + s_trend + s_bias
         
         analysis_data.append({
@@ -528,23 +533,18 @@ def get_global_ranking(df, omissions, interval_stats, weights):
             "得分佔比": 0 
         })
     
-    # === 🐞 除錯偵測點：檢查是否有分數完全相同且號碼接近的狀況 ===
-    # 這裡不更動數據，僅供你在後台 print 觀察 (若有需要可解除註解)
-    # print(f"DEBUG: 排名基準期鄰居球: {last_draw_nums}")
-
-    # 4. 排序並產出 DataFrame
+    # 7. 穩定排序：先比總分(大到小)，再比號碼(小到大)
     rank_df = pd.DataFrame(analysis_data).sort_values(
         by=["總得分", "號碼"], 
         ascending=[False, True] 
     ).reset_index(drop=True)
     
-    # 補算得分佔比 (不影響排序)
+    # 補算佔比
     total_sum = rank_df["總得分"].sum()
     if total_sum > 0:
         rank_df["得分佔比"] = (rank_df["總得分"] / total_sum * 100).round(2).astype(str) + "%"
 
     rank_df.index += 1 
-    
     return rank_df
 
 def smart_pick_3_backtest(df, omissions, interval_stats, weights={}):
