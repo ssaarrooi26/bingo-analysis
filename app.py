@@ -525,7 +525,15 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         s_bias = (occ_count / 50.0) * 0.1
         
         total_score = s_omit + s_neighbor + s_trend + s_bias
-        
+
+
+		# 🐞 這裡是除錯重點：印出特定號碼的分數組成
+	    # 假設你記下的 11-13 名號碼分別是 '05', '22', '38'
+	    target_debug = ['34', '77', '61'] 
+	    if num_str in target_debug:
+	        import streamlit as st
+	        st.write(f"🔍 號碼 {num_str} 分數組成：總分={round(total_score,4)} (遺漏:{round(s_omit,2)}, 鄰居:{round(s_neighbor,2)}, 趨勢:{round(s_trend,2)}, 微擾:{round(s_bias,4)})")
+			
         analysis_data.append({
             "號碼": num_str,
             "總得分": round(total_score, 4), 
