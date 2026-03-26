@@ -1490,23 +1490,23 @@ if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
 
 
 	
-    st.divider()
-    st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
+st.divider()
+st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
 	
-    if st.button("🔥 一鍵分析 3-13 名各組勝率"):
-        with st.spinner("正在進行深度數據對齊... 請稍候"):
-	        # 直接呼叫新方法
-	        best_groups_df = analyze_group_performance(df, sidebar_weights)
+if st.button("🔥 一鍵分析 3-13 名各組勝率"):
+    with st.spinner("正在進行深度數據對齊... 請稍候"):
+	    # 直接呼叫新方法
+	    best_groups_df = analyze_group_performance(df, sidebar_weights)
+	    
+	    # 顯示結果表格
+	    st.dataframe(
+	    best_groups_df.style.highlight_max(axis=0, subset=['綜合評分'], color='#3d1111'),
+	    use_container_width=True
+	    )
 	        
-	        # 顯示結果表格
-	        st.dataframe(
-	            best_groups_df.style.highlight_max(axis=0, subset=['綜合評分'], color='#3d1111'),
-	            use_container_width=True
-	        )
-	        
-	        # 推薦標示
-	        top_group = best_groups_df.iloc[0]["名次組別"]
-	        st.info(f"💡 根據這 50 期的嚴謹對齊數據，目前**「{top_group}」**的表現最為突出，建議優先參考。")
+        # 推薦標示
+        top_group = best_groups_df.iloc[0]["名次組別"]
+        st.info(f"💡 根據這 50 期的嚴謹對齊數據，目前**「{top_group}」**的表現最為突出，建議優先參考。")
 
 
 
