@@ -1304,9 +1304,12 @@ with col1:
 
 with col2:
     st.subheader("📈 方案二：全號碼競爭力排行榜")
+    # 🚀 關鍵修正：在執行排名前，先算出最新的 20 期趨勢字典
+    # 確保傳入 get_global_ranking 的 interval_stats 是有數值的
+    current_interval_stats = get_interval_stats(df.head(20)) 
     
-    # 執行強化版全域排名
-    rank_df = get_global_ranking(df, omissions, interval_stats, sidebar_weights)
+    # 執行強化版全域排名 
+    rank_df = get_global_ranking(df, omissions, current_interval_stats, sidebar_weights)
     
     # 快速摘要
     top_5 = rank_df.head(5)["號碼"].tolist()
