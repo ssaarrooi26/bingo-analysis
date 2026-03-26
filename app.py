@@ -544,7 +544,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         target_debug = ['71', '47', '35'] 
         if num_str in target_debug:
             # 增加 raw_interval_val 的顯示，一眼看出是不是字典傳輸失敗
-            st.write(f"🔍 號碼 {num_str} ({current_key})：總分={round(total_score,4)} | 趨勢原值={raw_interval_val} | 趨勢得分={round(s_trend,2)}")
+            st.write(f"🔍 號碼 {num_str} ({current_key})：總分={round(total_score,4)} 遺漏:{round(s_omit,2)} | 鄰居:{round(s_neighbor,2)} | 趨勢原值={raw_interval_val} | 趨勢得分={round(s_trend,2)} | 微擾:{round(s_bias,4)}")
 			
         analysis_data.append({
             "號碼": num_str,
