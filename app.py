@@ -1492,31 +1492,22 @@ if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
 
 	
     st.divider()
-    st.subheader("🧪 權重 AI 自動尋優")
-    st.write("系統將以目前設定為基準，自動測試 27 種微調組合，尋找三星勝率最高的設定。")
-    
-    if st.button("🔍 啟動自動尋優 (耗時約 30-60 秒)"):
-        with st.spinner("AI 正在瘋狂運算中..."):
-            best_w, all_res = optimize_weights(df, backtest_weights)
-            
-            # 轉成 DF 排序顯示
-            res_summary = pd.DataFrame(all_res).sort_values(by=["三星率", "二星數"], ascending=False)
-            
-            st.success(f"✅ 尋優完成！找到最佳三星率：{res_summary.iloc[0]['三星率']:.2f}%")
-            
-            # 顯示推薦的權重
-            st.write("### 🏆 推薦最佳權重配置：")
-            cols = st.columns(4)
-            cols[0].metric("鄰居權重", f"{best_w['neighbor_weight']:.2f}")
-            cols[1].metric("能量回流", f"{best_w['energy_weight']:.2f}")
-            cols[2].metric("區間熱力", f"{best_w['interval_weight']:.2f}")
-            cols[3].metric("遺漏節奏", f"{best_w['omission_weight']:.2f}")
-            
-            st.info("💡 你可以直接將這些數值填回左側的權重設定中，再次跑回測驗證。")
-            
-            with st.expander("查看所有測試組合數據"):
-                st.dataframe(res_summary[["權重組合", "三星率", "二星數"]], use_container_width=True)
-
+    st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
+	
+    if st.button("🔥 一鍵分析 3-13 名各組勝率"):
+        with st.spinner("正在進行深度數據對齊... 請稍候"):
+	        # 直接呼叫新方法
+	        best_groups_df = analyze_group_performance(df, sidebar_weights)
+	        
+	        # 顯示結果表格
+	        st.dataframe(
+	            best_groups_df.style.highlight_max(axis=0, subset=['綜合評分'], color='#3d1111'),
+	            use_container_width=True
+	        )
+	        
+	        # 推薦標示
+	        top_group = best_groups_df.iloc[0]["名次組別"]
+	        st.info(f"💡 根據這 50 期的嚴謹對齊數據，目前**「{top_group}」**的表現最為突出，建議優先參考。")
 
 
 
