@@ -457,6 +457,7 @@ def smart_pick_3(df, omissions, interval_stats, latest_draw_id, weights=None, en
 
 def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
+	import streamlit as st  # 🚀 確保函式內部能抓到 st
     
     # 1. 鎖定分析視野 (確保不論外部傳什麼，內部只看前 150 筆)
     analysis_window = 150
