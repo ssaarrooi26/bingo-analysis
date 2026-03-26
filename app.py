@@ -786,70 +786,75 @@ def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
     # 將所有期數的結果轉換為 DataFrame 格式回傳，方便 Streamlit 渲染表格與染色
     return pd.DataFrame(results)
 
-def analyze_group_performance(df, current_weights):
+def analyze_full_spectrum(df, current_weights):
     """
-    【嚴謹對齊版】自動測試 3-13 名中，每三碼為一組的歷史勝率。
-    完全呼叫既有的 get_global_ranking 確保邏輯與回測 100% 一致。
+    【3-63名 嚴謹全頻掃描】
+    1. 100% 呼叫既有的 get_global_ranking 確保邏輯對齊。
+    2. 自動遍歷 3-63 名中的所有「三碼組合」。
+    3. 統計 50 期歷史中的三星、二星、一星命中。
     """
-    # 1. 準備存儲容器
-    # 組別定義：3-5, 4-6, 5-7, 6-8, 7-9, 8-10, 9-11, 10-12, 11-13
-    groups = {f"{i}-{i+2}": {"3星": 0, "2星": 0, "1星": 0, "0星": 0} for i in range(3, 12)}
+    import pandas as pd
+    import streamlit as st
+
+    # --- 第一階段：生成 50 期歷史排行榜 (嚴謹鎖定) ---
+    # 這是為了確保每一期的排行榜都跟你在 Tab 4 看到的邏輯一模一樣
+    history_snapshots = [] # 格式: [(當期開獎集合, 當期排行榜)]
     
-    analysis_history = []
     progress_bar = st.progress(0)
     status_text = st.empty()
-
-    # 2. 模擬 50 期回測 (這是最耗時但最準確的部分)
+    
     for i in range(0, 50):
-        # --- 嚴謹切片：這部分與你的回測邏輯完全一致 ---
+        # 1. 嚴謹切片 (與回測邏輯一致)
         history_df = df.iloc[i+1 : i+151]
         actual_row = df.iloc[i]
-        actual_draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(actual_row[c], errors='coerce') >= 1]
+        actual_draw = set([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(actual_row[c], errors='coerce') >= 1])
         
-        # 呼叫你校正過的趨勢統計
+        # 2. 呼叫你的核心方法 (包含 20期趨勢統計)
+        # 注意：請確保 get_global_ranking 裡的 st.write 已關閉，否則會印出大量文字
         temp_interval_stats = get_interval_stats(history_df.head(20))
-        
-        # 呼叫核心排名方法 (確保邏輯對齊)
         rank_df = get_global_ranking(history_df, {}, temp_interval_stats, current_weights)
         
-        # 紀錄這一期的結果
-        analysis_history.append((set(actual_draw), rank_df))
+        history_snapshots.append((actual_draw, rank_df))
         
-        status_text.write(f"正在同步回測數據... 第 {i+1}/50 期")
-        progress_bar.progress((i + 1) / 50)
+        status_text.write(f"📂 正在同步歷史排行榜... 第 {i+1}/50 期")
+        progress_bar.progress((i + 1) / 50 * 0.6) # 前 60% 進度
 
-    # 3. 交叉比對各組別勝率
-    final_stats = []
-    for group_name, counts in groups.items():
-        start_idx = int(group_name.split('-')[0]) - 1 # 轉為 dataframe index
+    # --- 第二階段：滑動窗口掃描 (3-5, 4-6, ... 61-63) ---
+    results_list = []
+    status_text.write("🔍 正在掃描 3-63 名各段勝率...")
+
+    # 從第 3 名開始掃描到第 61 名起點 (對應 61, 62, 63 三碼組)
+    for start in range(3, 62):
+        h3, h2, h1 = 0, 0, 0
         
-        for draw_set, rank_df in analysis_history:
-            # 精準取出該組的三個號碼
-            group_nums = rank_df.iloc[start_idx : start_idx + 3]["號碼"].tolist()
-            hits = len(draw_set.intersection(group_nums))
+        for draw_set, rank_df in history_snapshots:
+            # 嚴謹取出該名次段的號碼 (iloc 是從 0 開始，所以第 3 名是 index 2)
+            group_nums = rank_df.iloc[start-1 : start+2]["號碼"].tolist()
+            matches = len(draw_set.intersection(group_nums))
             
-            if hits == 3: counts["3星"] += 1
-            elif hits == 2: counts["2星"] += 1
-            elif hits == 1: counts["1星"] += 1
-            else: counts["0星"] += 1
+            if matches == 3: h3 += 1
+            elif matches == 2: h2 += 1
+            elif matches == 1: h1 += 1
             
-        # 計算綜合權重分 (例如：3星給10分, 2星給3分, 1星給1分)
-        score = (counts["3星"] * 10) + (counts["2星"] * 3) + (counts["1星"] * 1)
-        
-        final_stats.append({
-            "名次組別": f"第 {group_name} 名",
-            "3星次數": counts["3星"],
-            "2星次數": counts["2星"],
-            "1星次數": counts["1星"],
-            "三星勝率": f"{(counts['3星']/50)*100:.1f}%",
-            "綜合評分": score
+        # 綜合評分：你可以根據需求調整權重 (例如 3星 10分, 2星 3分)
+        score = (h3 * 10) + (h2 * 3) + (h1 * 1)
+        results_list.append({
+            "名次區間": f"第 {start}-{start+2} 名",
+            "3星次數": h3,
+            "2星次數": h2,
+            "1星次數": h1,
+            "三星率": f"{(h3/50)*100:.1f}%",
+            "綜合評分": score,
+            "start_val": start # 用於後續圖表排序
         })
 
-    # 4. 產出排序後的結果
-    result_df = pd.DataFrame(final_stats).sort_values(by="綜合評分", ascending=False)
+    # --- 第三階段：整理與排序 ---
+    df_results = pd.DataFrame(results_list).sort_values(by="綜合評分", ascending=False)
     
-    status_text.success("✅ 數據對齊分析完成！")
-    return result_df
+    status_text.success(f"✅ 3-63名全頻掃描完成！(共分析 {len(results_list)} 組)")
+    progress_bar.progress(1.0)
+    
+    return df_results
 
 def dual_dimension_analysis(df):
     if len(df) < 20:
@@ -1493,20 +1498,18 @@ if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
 st.divider()
 st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
 
-if st.button("🔥 一鍵分析 3-13 名各組勝率"):
-    with st.spinner("正在進行深度數據對齊... 請稍候"):
-        # 直接呼叫新方法
-        best_groups_df = analyze_group_performance(df, sidebar_weights)
+if st.button("📈 啟動 3-63名 全頻勝率掃描"):
+    with st.spinner("深度回測中... 這可能需要 20 秒"):
+        final_df = analyze_full_spectrum(df, sidebar_weights)
         
-        # 顯示結果表格
-        st.dataframe(
-            best_groups_df.style.highlight_max(axis=0, subset=['綜合評分'], color='#3d1111'),
-            use_container_width=True
-        )
+        # 1. 顯示排行榜
+        st.write("### 🏆 3-63名 各組歷史得分榜")
+        st.dataframe(final_df, use_container_width=True)
         
-        # 推薦標示
-        top_group = best_groups_df.iloc[0]["名次組別"]
-        st.info(f"💡 根據這 50 期的嚴謹對齊數據，目前**「{top_group}」**的表現最為突出，建議優先參考。")
+        # 2. 顯示走勢圖
+        st.write("### 📈 排名與勝率走勢圖")
+        chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
+        st.line_chart(chart_df)
 
 
 
