@@ -540,10 +540,11 @@ def get_global_ranking(df, omissions, interval_stats, weights):
 
 		# 🐞 這裡是除錯重點：印出特定號碼的分數組成
         # 假設你記下的 11-13 名號碼分別是 '05', '22', '38'
+        # 🚀 [修正] 下面這幾行的縮排必須絕對統一，不能混用 Tab
         target_debug = ['34', '77', '61'] 
         if num_str in target_debug:
-            import streamlit as st
-            st.write(f"🔍 號碼 {num_str} 分數組成：總分={round(total_score,4)} (遺漏:{round(s_omit,2)}, 鄰居:{round(s_neighbor,2)}, 趨勢:{round(s_trend,2)}, 微擾:{round(s_bias,4)})")
+            # 增加 raw_interval_val 的顯示，一眼看出是不是字典傳輸失敗
+            st.write(f"🔍 號碼 {num_str} ({current_key})：總分={round(total_score,4)} | 趨勢原值={raw_interval_val} | 趨勢得分={round(s_trend,2)}")
 			
         analysis_data.append({
             "號碼": num_str,
