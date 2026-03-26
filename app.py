@@ -526,6 +526,10 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
         s_trend = interval_stats.get(current_key, 0) * weights['trend']
+
+        # 🚀 [關鍵 DEBUG] 檢查為什麼 Tab 4 是 0 分
+        raw_interval_val = interval_stats.get(current_key, 0)
+        s_trend = raw_interval_val * weights['trend']		
         
         # D. 微擾動 (打破平手)
         occ_count = freq_map.get(num_str, 0)
