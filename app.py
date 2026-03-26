@@ -11,77 +11,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import itertools
 
-def real_time_bingo_monitor():
-    """
-    賓果賓果實時監控面板：包含秒級倒數與自動數據過期提醒
-    """
-    # 🕒 每 1 秒自動刷新一次頁面 (1000 毫秒)
-    # key 設為 "timer" 避免與其他組件衝突
-    st_autorefresh(interval=1000, key="bingo_timer")
 
-    now = datetime.now()
-    
-    # 賓果營業時間 07:05 ~ 23:55
-    start_time = now.replace(hour=7, minute=5, second=0)
-    end_time = now.replace(hour=23, minute=55, second=0)
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🎯 實時開獎監測")
-
-    if now < start_time or now > end_time:
-        st.sidebar.warning("🌙 目前非營業時間")
-        st.sidebar.caption("營業時間：07:05 ~ 23:55")
-        return
-
-    # 計算下一期時間 (5分鐘一期)
-    # 邏輯：下一期分鐘 = (當前分鐘 // 5 + 1) * 5
-    next_minute = ((now.minute // 5) + 1) * 5
-    
-    # 處理跨小時問題
-    if next_minute >= 60:
-        next_draw = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    else:
-        next_draw = now.replace(minute=next_minute, second=0, microsecond=0)
-
-    remaining_sec = int((next_draw - now).total_seconds())
-
-    # 🎨 UI 視覺化設計
-    if remaining_sec <= 30:
-        status_color = "#FF4B4B" # 紅色 (封盤/開獎中)
-        status_text = "🚫 封盤開獎中"
-    elif remaining_sec <= 90:
-        status_color = "#FFA500" # 橘色 (最後衝刺)
-        status_text = "⚠️ 準備封盤"
-    else:
-        status_color = "#00FF00" # 綠色 (分析黃金期)
-        status_text = "✅ 數據分析中"
-
-    # 顯示大倒數
-    st.sidebar.markdown(
-        f"""
-        <div style="background-color: #262730; padding: 15px; border-radius: 10px; border-left: 5px solid {status_color};">
-            <p style="margin: 0; font-size: 0.9rem; color: #888;">{status_text}</p>
-            <h1 style="margin: 0; color: {status_color}; font-family: monospace;">
-                {remaining_sec // 60:02d}:{remaining_sec % 60:02d}
-            </h1>
-            <p style="margin: 0; font-size: 0.8rem; color: #555;">下一期預計: {next_draw.strftime('%H:%M:%S')}</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-
-    # 進度條 (300秒為一週期)
-    progress = (300 - remaining_sec) / 300
-    st.sidebar.progress(progress)
-
-    # 💡 數據分析建議
-    if 120 <= remaining_sec <= 280:
-        st.sidebar.info("💡 **最佳分析時間**：現在執行「3-63名全頻掃描」最準確！")
-    elif remaining_sec < 10:
-        st.sidebar.error("📢 **即將更新**：請在 10 秒後刷新 CSV 資料。")
-
-# --- 在主程式呼叫 ---
-real_time_bingo_monitor()
 
 # 爬蟲測試函數
 def fetch_full_table_from_web():
