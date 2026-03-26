@@ -786,71 +786,70 @@ def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
     # 將所有期數的結果轉換為 DataFrame 格式回傳，方便 Streamlit 渲染表格與染色
     return pd.DataFrame(results)
 
-def optimize_weights(df, base_weights):
-    best_win_rate = -1
-    best_weights = base_weights.copy()
-    optimization_results = []
+def analyze_group_performance(df, current_weights):
+    """
+    【嚴謹對齊版】自動測試 3-13 名中，每三碼為一組的歷史勝率。
+    完全呼叫既有的 get_global_ranking 確保邏輯與回測 100% 一致。
+    """
+    # 1. 準備存儲容器
+    # 組別定義：3-5, 4-6, 5-7, 6-8, 7-9, 8-10, 9-11, 10-12, 11-13
+    groups = {f"{i}-{i+2}": {"3星": 0, "2星": 0, "1星": 0, "0星": 0} for i in range(3, 12)}
     
-    # 1. 自動抓取權重字典中所有的 Key (不論中文或英文)
-    # 限制測試前 3 個權重，避免組合爆炸 (3^3 = 27 組，3^4 = 81 組)
-    all_keys = list(base_weights.keys())
-    target_keys = all_keys[:3] 
-    
-    adj_range = [-0.1, 0, 0.1]
-    total_combinations = len(adj_range) ** len(target_keys)
-    
+    analysis_history = []
     progress_bar = st.progress(0)
     status_text = st.empty()
-    count = 0
-    
-    status_text.write(f"正在交叉測試 {total_combinations} 組權重組合 (優化目標: {', '.join(target_keys)})...")
 
-    # 2. 開始排列組合測試
-    for adjs in itertools.product(adj_range, repeat=len(target_keys)):
-        test_weights = base_weights.copy()
+    # 2. 模擬 50 期回測 (這是最耗時但最準確的部分)
+    for i in range(0, 50):
+        # --- 嚴謹切片：這部分與你的回測邏輯完全一致 ---
+        history_df = df.iloc[i+1 : i+151]
+        actual_row = df.iloc[i]
+        actual_draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(actual_row[c], errors='coerce') >= 1]
         
-        for i, key in enumerate(target_keys):
-            # 自動計算並確保權重不小於 0
-            new_val = float(base_weights[key]) + adjs[i]
-            test_weights[key] = round(max(0.0, new_val), 2)
+        # 呼叫你校正過的趨勢統計
+        temp_interval_stats = get_interval_stats(history_df.head(20))
         
-        # 3. 執行回測與統計
-        try:
-            res_df = run_backtest(df, test_weights)
-            
-            # 統計三星勝率與二星近彈數
-            win_rate = (res_df["是否成功(三星)"].sum() / len(res_df)) * 100
-            near_miss_rate = (res_df["最高單期命中"] == 2).sum()
-            
-            optimization_results.append({
-                "權重變動": str(adjs),
-                "三星率": win_rate,
-                "二星數": near_miss_rate,
-                "詳細配置": test_weights.copy()
-            })
-            
-            # 更新最優解
-            if win_rate > best_win_rate:
-                best_win_rate = win_rate
-                best_weights = test_weights.copy()
-            elif win_rate == best_win_rate:
-                # 如果三星率一樣，選二星數較高的組合
-                current_best_near = (pd.DataFrame(optimization_results)["二星數"].max() 
-                                     if optimization_results else 0)
-                if near_miss_rate > current_best_near:
-                    best_weights = test_weights.copy()
+        # 呼叫核心排名方法 (確保邏輯對齊)
+        rank_df = get_global_ranking(history_df, {}, temp_interval_stats, current_weights)
+        
+        # 紀錄這一期的結果
+        analysis_history.append((set(actual_draw), rank_df))
+        
+        status_text.write(f"正在同步回測數據... 第 {i+1}/50 期")
+        progress_bar.progress((i + 1) / 50)
 
-        except Exception as e:
-            st.error(f"回測計算發生錯誤: {e}")
-            break
-            
-        count += 1
-        progress_bar.progress(count / total_combinations)
+    # 3. 交叉比對各組別勝率
+    final_stats = []
+    for group_name, counts in groups.items():
+        start_idx = int(group_name.split('-')[0]) - 1 # 轉為 dataframe index
         
-    status_text.success("尋優計算完成！")
-    progress_bar.empty()
+        for draw_set, rank_df in analysis_history:
+            # 精準取出該組的三個號碼
+            group_nums = rank_df.iloc[start_idx : start_idx + 3]["號碼"].tolist()
+            hits = len(draw_set.intersection(group_nums))
+            
+            if hits == 3: counts["3星"] += 1
+            elif hits == 2: counts["2星"] += 1
+            elif hits == 1: counts["1星"] += 1
+            else: counts["0星"] += 1
+            
+        # 計算綜合權重分 (例如：3星給10分, 2星給3分, 1星給1分)
+        score = (counts["3星"] * 10) + (counts["2星"] * 3) + (counts["1星"] * 1)
+        
+        final_stats.append({
+            "名次組別": f"第 {group_name} 名",
+            "3星次數": counts["3星"],
+            "2星次數": counts["2星"],
+            "1星次數": counts["1星"],
+            "三星勝率": f"{(counts['3星']/50)*100:.1f}%",
+            "綜合評分": score
+        })
+
+    # 4. 產出排序後的結果
+    result_df = pd.DataFrame(final_stats).sort_values(by="綜合評分", ascending=False)
     
-    return best_weights, optimization_results
+    status_text.success("✅ 數據對齊分析完成！")
+    return result_df
 
 def dual_dimension_analysis(df):
     if len(df) < 20:
