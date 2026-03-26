@@ -469,7 +469,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     analysis_window = 150
     valid_df = df.head(analysis_window).copy() 
 
-    st.sidebar.write(f"當前計算基準: {valid_df.iloc[0].get('期數', 'n/a')}")
+    #st.sidebar.write(f"當前計算基準: {valid_df.iloc[0].get('期數', 'n/a')}")
     # 2. 定義球號標題 (針對你改好的 01-80 格式)
     # 使用 sorted 確保標題順序在任何環境下都一致
     ball_cols = sorted([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()])
