@@ -1,5 +1,6 @@
 pandas
 
+streamlit-autorefresh
 matplotlib
 requests
 beautifulsoup4
