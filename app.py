@@ -205,27 +205,33 @@ def get_interval_stats(df):
     """
     計算區間熱力統計 (統一為 20 期平均模式)
     """
+    import pandas as pd
     intervals = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
     stats = {intv: 0 for intv in intervals}
     
-    # 統一取 20 期
-    recent_20 = df.head(20)
-    ball_cols = [c for c in df.columns if str(c).isdigit()]
+    # 🚀 修正 1：確保直接使用傳入的資料（不再 head 避免二次位移）
+    # 建議在外部呼叫時就給它正確的 20 期：get_interval_stats(history_df.head(20))
+    analysis_df = df.head(20) 
     
-    for _, row in recent_20.iterrows():
+    # 🚀 修正 2：統一標題格式
+    ball_cols = [c for c in df.columns if str(c).strip().isdigit()]
+    
+    for _, row in analysis_df.iterrows():
         for col in ball_cols:
-            val = row[col]
-            if pd.notnull(val) and pd.to_numeric(val, errors='coerce') >= 1:
-                num = int(val)
+            val = pd.to_numeric(row[col], errors='coerce')
+            # 🚀 修正 3：判斷邏輯。如果該格值 >= 1，代表「該標題號碼」有開出
+            if pd.notnull(val) and val >= 1:
+                # 號碼應該是「標題名稱」，而不是儲存格裡的值
+                num = int(col) 
                 idx = (num - 1) // 10
                 if 0 <= idx < len(intervals):
                     stats[intervals[idx]] += 1
-                    
-    # 計算平均值
+                        
+    # 計算 20 期平均值
     for key in stats:
-        stats[key] = stats[key] / 20.0
+        stats[key] = round(stats[key] / 20.0, 4)
         
-    return stats # 改回傳字典，方便 get_global_ranking 讀取
+    return stats
 
 # 遺漏期數統計
 def calculate_omission(df, target_numbers=None):
@@ -728,7 +734,8 @@ def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
         # 2. ⚡ 關鍵同步：取得當時的區間熱力數據
         # 呼叫外部統一的 get_interval_stats 函式，傳入模擬的歷史視窗
         # 這裡會得到一個「字典」格式的 20 期平均熱度，與 Tab 1 即時顯示完全一致
-        temp_interval_stats = get_interval_stats(history_df) 
+		# 這樣可以確保傳進去的就是從基準期開始算的 20 期
+        temp_interval_stats = get_interval_stats(history_df.head(20))
 
         # 3. 🔍 執行核心排名計算
         # 將當時的歷史、空遺漏表、統計字典、權重傳入排名引擎
