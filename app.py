@@ -1062,15 +1062,9 @@ if rec:
 
     
 # 3. 功能分頁
-tab1, tab2, tab3, tab4 = st.tabs(["🔥 頻率分佈圖", "分段趨勢表", "🔮 智能建議", "策略回測"])
+tab1 = st.tabs(["策略回測"])
 
 with tab1:
-    
-with tab2:
-    
-
-with tab3:
-    
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
