@@ -1073,7 +1073,7 @@ st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即
 
 
 with tab1: # 第1個 Tab
-	st.header("📊 雙軌數據分析中心")
+    st.header("📊 雙軌數據分析中心")
     st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
 
     col1, col2 = st.columns([1, 1.8])
@@ -1085,9 +1085,9 @@ with tab1: # 第1個 Tab
         
         st.markdown("---")
         for r in recs:
-        st.markdown(f"### 📍 推薦號碼：`{r}`")
+            st.markdown(f"### 📍 推薦號碼：`{r}`")
         st.markdown("---")
-        st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
+        st.caption("💡 這是基於當前權重算出的最高分三位一體組合.")
 
     with col2:
         st.subheader("📈 方案二：全號碼競爭力排行榜")
@@ -1120,62 +1120,58 @@ with tab1: # 第1個 Tab
     with col_s:
         # 這裡定義 start_r，預設值設為 11
         start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
-	with col_e:
-	    # 這裡定義 end_r，預設值設為 13
-	    end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
-	
+    with col_e:
+        # 這裡定義 end_r，預設值設為 13
+        end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
+    
     # 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
     if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
         with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
-	        # 執行回測：傳入自定義的 start_r 與 end_r
+            # 執行回測：傳入自定義的 start_r 與 end_r
             backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
-	    
+        
         if backtest_df is None or backtest_df.empty:
-	        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
+            st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
         else:
-	        # --- 數據處理 ---
-	        total_tests = len(backtest_df)
-	        success_3 = backtest_df["三星成功"].sum()
-	        success_2 = backtest_df["二星命中"].sum()
-	        success_1 = backtest_df["一星命中"].sum()
-	        
-	        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
-	        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
-	        
-	        # --- 顯示儀表板 ---
-	        st.subheader(f"🏁 排名 {start_r}-{end_r} 策略回測總結")
-	        st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
-	
-	        c1, c2, c3, c4 = st.columns(4)
-	        c1.metric("回測總期數", f"{total_tests} 期")
-	        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
-	        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
-	        c4.metric("一星命中", f"{success_1} 次")
-	
-	        # --- 詳細清單與染色 ---
-	        st.write(f"### 📝 詳細模擬紀錄 ({start_r}-{end_r} 名策略)")
-	        
-	        # 定義專用的染色函式（維持原狀，使用 '最高單期命中'）
-	        def highlight_rank_hits(row):
-	            val = row['最高單期命中']
-	            if val == 3: 
-	                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
-	            elif val == 2: 
-	                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
-	            elif val == 1: 
-	                return ['background-color: #fff3cd; color: black'] * len(row)
-	            return [''] * len(row)
-	
-	        st.dataframe(
-	            backtest_df.style.apply(highlight_rank_hits, axis=1),
-	            use_container_width=True,
-	            height=500
-	        )
+            # --- 數據處理 ---
+            total_tests = len(backtest_df)
+            success_3 = backtest_df["三星成功"].sum()
+            success_2 = backtest_df["二星命中"].sum()
+            success_1 = backtest_df["一星命中"].sum()
+            
+            win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+            win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+            
+            # --- 顯示儀表板 ---
+            st.subheader(f"🏁 排名 {start_r}-{end_r} 策略回測總結")
+            st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
+    
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("回測總期數", f"{total_tests} 期")
+            c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+            c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+            c4.metric("一星命中", f"{success_1} 次")
+    
+            # --- 詳細清單與染色 ---
+            st.write(f"### 📝 詳細模擬紀錄 ({start_r}-{end_r} 名策略)")
+            
+            # 定義專用的染色函式（維持原狀，使用 '最高單期命中'）
+            def highlight_rank_hits(row):
+                val = row['最高單期命中']
+                if val == 3: 
+                    return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+                elif val == 2: 
+                    return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+                elif val == 1: 
+                    return ['background-color: #fff3cd; color: black'] * len(row)
+                return [''] * len(row)
+    
+            st.dataframe(
+                backtest_df.style.apply(highlight_rank_hits, axis=1),
+                use_container_width=True,
+                height=500
+            )
 
-	
-
-
-	
     st.divider()
     st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
 
@@ -1189,7 +1185,8 @@ with tab1: # 第1個 Tab
         
             # 2. 顯示走勢圖
             st.write("### 📈 排名與勝率走勢圖")
-            chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
+            # 修正：確保使用正確的欄位名稱 "名次區段" (你原本寫區間) 以免報錯
+            chart_df = final_df.sort_values("start_val").set_index("名次區段")["綜合評分"]
             st.line_chart(chart_df)
 
 
