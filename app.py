@@ -1064,10 +1064,7 @@ if rec:
 # 3. 功能分頁
 tab1 = st.tabs(["策略回測"])
 
-with tab1:
-
-    st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
-
+st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 st.header("📊 雙軌數據分析中心")
 st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
 
@@ -1107,8 +1104,7 @@ with col2:
         use_container_width=True,
         height=450
     )
-
-with tab4: # 第四個 Tab
+with tab1:
     st.header("📊 策略勝率回測 (過去 50 期)")
 
     # --- 回測專用的局部權重控制 ---
