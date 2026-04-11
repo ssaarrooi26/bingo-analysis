@@ -469,63 +469,88 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     import pandas as pd
     import streamlit as st  # 🚀 確保函式內部能抓到 st
     
-    # 1. 鎖定分析視野 (確保不論外部傳什麼，內部只看前 150 筆)
-    analysis_window = 150
-    valid_df = df.head(analysis_window).copy() 
+    # --- 【第一部分：連續性斷點檢查區】 ---
+    
+    # 1. 複製原始資料並重置索引，確保計算位置時不受原始 DataFrame 索引干擾
+    temp_df = df.copy().reset_index(drop=True)
+    
+    # 2. 定義期數列名稱，並將其數值化以便計算差距
+    period_col = '期數' 
+    periods = pd.to_numeric(temp_df[period_col], errors='coerce')
+    
+    # 3. 計算每一行與前一行的差值 (降序排列下，連續期數差值應固定為 -1)
+    period_diffs = periods.diff()
+    
+    # 4. 偵測斷點：找出差值不等於 -1 的位置 (排除第一筆 NaN)
+    # 若 115019716 下一筆是 115019637，差值非 -1，該索引會被存入 break_indices
+    break_indices = period_diffs[period_diffs.notna() & (period_diffs != -1)].index.tolist()
+
+    if break_indices:
+        # 🚀 發現斷點：first_break 代表從這一行開始數據就不連續了
+        first_break = break_indices[0]
+        # 僅截取斷層之前的「連續期數」，且最多不超過 150 筆
+        # 使用 min 確保即便連續，我們也不會讀取超過 150 筆的效能負擔
+        valid_df = temp_df.iloc[:min(first_break, 150)].copy()
+    else:
+        # 數據完全連續：直接鎖定分析視野為前 150 筆
+        valid_df = temp_df.head(150).copy()
+
+    # 安全檢查：若完全無有效資料則回傳空表，避免後續代碼報錯
+    if len(valid_df) < 1:
+        return pd.DataFrame()
 
     #st.sidebar.write(f"當前計算基準: {valid_df.iloc[0].get('期數', 'n/a')}")
-    # 2. 定義球號標題 (針對你改好的 01-80 格式)
+    # 定義球號標題 (針對你改好的 01-80 格式)
     # 使用 sorted 確保標題順序在任何環境下都一致
-    ball_cols = sorted([str(c).zfill(2) for c in df.columns if str(c).strip().isdigit()])
+    ball_cols = sorted([str(c).zfill(2) for c in valid_df.columns if str(c).strip().isdigit()])
     
-    # 3. 取得「基準期」開獎號碼 (用於計算鄰居球)
+    # 取得「基準期」開獎號碼 (用於計算鄰居球)
     # 關鍵：這是回測與即時介面最容易產生落差的地方
     last_draw_row = valid_df.iloc[0] 
     last_draw_nums = set()
-    for col in df.columns:
-        if str(col).strip().isdigit():
-            val = pd.to_numeric(last_draw_row[col], errors='coerce')
-            if val >= 1:
-                last_draw_nums.add(str(col).zfill(2))
-    
-    # 4. 重新計算「150期內遺漏值」
+    # 遍歷欄位，將最新一期有開出的號碼 (val >= 1) 加入集合
+    for col in ball_cols:
+        val = pd.to_numeric(last_draw_row[col], errors='coerce')
+        if val >= 1:
+            last_draw_nums.add(col)
+
+    # 重新計算「連續區間內」的遺漏值
+    # 注意：這裡只會計算 valid_df (截斷後) 內的資料，保證不跨越斷層
     short_omissions = {}
-    for i in range(1, 81):
-        num_str = str(i).zfill(2)
-        miss_count = 0
-        for _, row in valid_df.iterrows():
-            # 建立當期開獎集合
-            draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
-            if num_str in draw:
-                break
-            miss_count += 1
-        short_omissions[num_str] = miss_count
+    for num_str in ball_cols:
+        # 找到該號碼在 valid_df 中有開出的所有行索引
+        hit_rows = valid_df.index[pd.to_numeric(valid_df[num_str], errors='coerce') >= 1].tolist()
+        if not hit_rows:
+            # 若連續區間內都沒開，遺漏值定義為該區間總長度
+            short_omissions[num_str] = len(valid_df)
+        else:
+            # 遺漏值 = 距離最新一期差了幾行 (0 代表當期開出)
+            short_omissions[num_str] = hit_rows[0]
 
-    # 5. 計算「50期頻率微擾」
-    recent_50_df = valid_df.head(50)
-    freq_map = {}
-    for _, row in recent_50_df.iterrows():
-        draw = [str(c).zfill(2) for c in df.columns if str(c).strip().isdigit() and pd.to_numeric(row[c], errors='coerce') >= 1]
-        for n in draw:
-            freq_map[n] = freq_map.get(n, 0) + 1
+    # 計算「頻率微擾」：取連續區間與 50 期的交集長度
+    sample_size = min(50, len(valid_df))
+    recent_df = valid_df.iloc[:sample_size]
+    # 向量化計算出現次數，提升運算速度
+    freq_map = (recent_df[ball_cols] >= 1).sum().to_dict()
 
+	
+    # 核心評分循環
     analysis_data = []
     
-    # 6. 核心評分循環
     for i in range(1, 81):
         num_str = str(i).zfill(2)
         num_int = int(i)
         
-        # A. 遺漏分
+        # A. 遺漏分:使用受保護的遺漏值
         omit_val = short_omissions.get(num_str, 0)
         s_omit = omit_val * weights['omit']
         
-        # B. 動態連動分 (鄰居球)
+        # B. 動態連動分 (鄰居球):計算該號碼左右鄰居在基準期是否開出
         neighbors = {str(num_int-1).zfill(2), str(num_int+1).zfill(2)}
         hit_neighbors = len(neighbors.intersection(last_draw_nums))
         s_neighbor = hit_neighbors * weights['neighbor'] * 2 
         
-        # C. 區間趨勢分 (由外部傳入的 20期平均字典)
+        # C. 區間趨勢分 (由外部傳入的 20期平均數據)
         interval_idx = (num_int - 1) // 10
         interval_keys = ["01-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80"]
         current_key = interval_keys[interval_idx]
@@ -537,7 +562,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         
         # D. 微擾動 (打破平手)
         occ_count = freq_map.get(num_str, 0)
-        s_bias = (occ_count / 50.0) * 0.1
+        s_bias = (occ_count / sample_size) * 0.1 if sample_size > 0 else 0
         
         total_score = s_omit + s_neighbor + s_trend + s_bias
 
@@ -558,7 +583,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
             "得分佔比": 0 
         })
     
-    # 7. 穩定排序：先比總分(大到小)，再比號碼(小到大)
+    # 穩定排序：先比總分(大到小)，再比號碼(小到大)
     rank_df = pd.DataFrame(analysis_data).sort_values(
         by=["總得分", "號碼"], 
         ascending=[False, True] 
