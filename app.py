@@ -1070,68 +1070,69 @@ tab1 = st.tabs(["策略回測"])
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
 
-st.header("📊 雙軌數據分析中心")
-st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
 
-col1, col2 = st.columns([1, 1.8])
-
-with col1:
-    st.subheader("🎯 方案一：Smart Pick 3")
-    # 執行原本的選號邏輯
-    recs, _ = smart_pick_3(df, omissions, interval_stats, None, weights=sidebar_weights)
-    
-    st.markdown("---")
-    for r in recs:
-        st.markdown(f"### 📍 推薦號碼：`{r}`")
-    st.markdown("---")
-    st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
-
-with col2:
-    st.subheader("📈 方案二：全號碼競爭力排行榜")
-    # 🚀 關鍵修正：在執行排名前，先算出最新的 20 期趨勢字典
-    # 確保傳入 get_global_ranking 的 interval_stats 是有數值的
-    current_interval_stats = get_interval_stats(df.head(20)) 
-    
-    # 執行強化版全域排名 
-    rank_df = get_global_ranking(df, omissions, current_interval_stats, sidebar_weights)
-    
-    # 快速摘要
-    top_5 = rank_df.head(5)["號碼"].tolist()
-    bottom_5 = rank_df.tail(5)["號碼"].tolist()
-    
-    c1, c2 = st.columns(2)
-    c1.success(f"🔝 潛力前五：{', '.join(top_5)}")
-    c2.error(f"🗑️ 建議避雷：{', '.join(bottom_5)}")
-    
-    # 顯示完整資料表
-    st.dataframe(
-        rank_df.style.background_gradient(subset=['總得分'], cmap='YlOrRd'),
-        use_container_width=True,
-        height=450
-    )
 
 with tab1: # 第1個 Tab
+	st.header("📊 雙軌數據分析中心")
+    st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
+
+    col1, col2 = st.columns([1, 1.8])
+
+    with col1:
+        st.subheader("🎯 方案一：Smart Pick 3")
+        # 執行原本的選號邏輯
+        recs, _ = smart_pick_3(df, omissions, interval_stats, None, weights=sidebar_weights)
+        
+        st.markdown("---")
+        for r in recs:
+        st.markdown(f"### 📍 推薦號碼：`{r}`")
+        st.markdown("---")
+        st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
+
+    with col2:
+        st.subheader("📈 方案二：全號碼競爭力排行榜")
+        # 🚀 關鍵修正：在執行排名前，先算出最新的 20 期趨勢字典
+        # 確保傳入 get_global_ranking 的 interval_stats 是有數值的
+        current_interval_stats = get_interval_stats(df.head(20)) 
+    
+        # 執行強化版全域排名 
+        rank_df = get_global_ranking(df, omissions, current_interval_stats, sidebar_weights)
+    
+        # 快速摘要
+        top_5 = rank_df.head(5)["號碼"].tolist()
+        bottom_5 = rank_df.tail(5)["號碼"].tolist()
+    
+        c1, c2 = st.columns(2)
+        c1.success(f"🔝 潛力前五：{', '.join(top_5)}")
+        c2.error(f"🗑️ 建議避雷：{', '.join(bottom_5)}")
+    
+        # 顯示完整資料表
+        st.dataframe(
+            rank_df.style.background_gradient(subset=['總得分'], cmap='YlOrRd'),
+            use_container_width=True,
+            height=450
+        )
     
     
                 
-# --- 1. 先定義變數 (確保按鈕執行前變數已存在) ---
-	col_s, col_e = st.columns(2)
-	with col_s:
-	    # 這裡定義 start_r，預設值設為 11
-	    start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
+    # --- 1. 先定義變數 (確保按鈕執行前變數已存在) ---
+    col_s, col_e = st.columns(2)
+    with col_s:
+        # 這裡定義 start_r，預設值設為 11
+        start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
 	with col_e:
 	    # 這裡定義 end_r，預設值設為 13
 	    end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
 	
-	# 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
-	if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
-	    with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
+    # 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
+    if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
+        with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
 	        # 執行回測：傳入自定義的 start_r 與 end_r
-	        backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
+            backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
 	    
-	    if backtest_df is None or backtest_df.empty:
+        if backtest_df is None or backtest_df.empty:
 	        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
-	    else:
+        else:
 	        # --- 數據處理 ---
 	        total_tests = len(backtest_df)
 	        success_3 = backtest_df["三星成功"].sum()
@@ -1175,21 +1176,21 @@ with tab1: # 第1個 Tab
 
 
 	
-st.divider()
-st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
+    st.divider()
+    st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
 
-if st.button("📈 啟動 3-63名 全頻勝率掃描"):
-    with st.spinner("深度回測中... 這可能需要 20 秒"):
-        final_df = analyze_full_spectrum(df, sidebar_weights)
+    if st.button("📈 啟動 3-63名 全頻勝率掃描"):
+        with st.spinner("深度回測中... 這可能需要 20 秒"):
+            final_df = analyze_full_spectrum(df, sidebar_weights)
         
-        # 1. 顯示排行榜
-        st.write("### 🏆 3-63名 各組歷史得分榜")
-        st.dataframe(final_df, use_container_width=True)
+            # 1. 顯示排行榜
+            st.write("### 🏆 3-63名 各組歷史得分榜")
+            st.dataframe(final_df, use_container_width=True)
         
-        # 2. 顯示走勢圖
-        st.write("### 📈 排名與勝率走勢圖")
-        chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
-        st.line_chart(chart_df)
+            # 2. 顯示走勢圖
+            st.write("### 📈 排名與勝率走勢圖")
+            chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
+            st.line_chart(chart_df)
 
 
 
