@@ -81,7 +81,7 @@ def update_multiple_to_gsheets(new_data_list):
         sheet = client.open("數據分析_2026").sheet1
         
         # 抓取雲端現有期數，避免重複寫入
-	# 使用 set 提高搜尋速度
+    # 使用 set 提高搜尋速度
         existing_ids = set(str(x).strip() for x in sheet.col_values(1) if x)
         
         rows_to_insert = []
@@ -111,13 +111,13 @@ def update_multiple_to_gsheets(new_data_list):
                         row_data[num_int] = n
             
             rows_to_insert.append(row_data)
-	    # 同時加入 set 防止這批新資料裡有重複期數
+        # 同時加入 set 防止這批新資料裡有重複期數
             existing_ids.add(draw_id)
 
         if not rows_to_insert:
             return "ℹ️ 官網資料已存在於雲端，無須更新。"
 
-	# 批量插入 (使用 insert_rows，一次通訊解決所有新資料)
+    # 批量插入 (使用 insert_rows，一次通訊解決所有新資料)
         # index=2 代表插入在標題列下方
         # 修正後的批量插入：使用 index=2 確保相容性
 
@@ -125,7 +125,7 @@ def update_multiple_to_gsheets(new_data_list):
         try:
             sheet.insert_rows(rows_to_insert, index=2)
         except TypeError:
-	    # 如果還是失敗，嘗試不帶參數名稱的寫法（部分舊版支援）
+        # 如果還是失敗，嘗試不帶參數名稱的寫法（部分舊版支援）
             sheet.insert_rows(rows_to_insert, 2)
         
         return f"✅ 成功！已批量完成 {len(rows_to_insert)} 筆數據同步。"
@@ -534,7 +534,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
     # 向量化計算出現次數，提升運算速度
     freq_map = (recent_df[ball_cols] >= 1).sum().to_dict()
 
-	
+    
     # 核心評分循環
     analysis_data = []
     
@@ -559,7 +559,7 @@ def get_global_ranking(df, omissions, interval_stats, weights):
 
         # 🚀 [關鍵 DEBUG] 檢查為什麼 Tab 4 是 0 分
         raw_interval_val = interval_stats.get(current_key, 0)
-        s_trend = raw_interval_val * weights['trend']		
+        s_trend = raw_interval_val * weights['trend']       
         
         # D. 微擾動 (打破平手)
         occ_count = freq_map.get(num_str, 0)
@@ -568,14 +568,14 @@ def get_global_ranking(df, omissions, interval_stats, weights):
         total_score = s_omit + s_neighbor + s_trend + s_bias
 
 
-		# 🐞 這裡是除錯重點：印出特定號碼的分數組成
+        # 🐞 這裡是除錯重點：印出特定號碼的分數組成
         # 假設你記下的 11-13 名號碼分別是 '05', '22', '38'
         # 🚀 [修正] 下面這幾行的縮排必須絕對統一，不能混用 Tab
         #target_debug = ['71', '47', '35'] 
         #if num_str in target_debug:
             # 增加 raw_interval_val 的顯示，一眼看出是不是字典傳輸失敗
             #st.write(f"🔍 號碼 {num_str} ({current_key})：總分={round(total_score,4)} 遺漏:{round(s_omit,2)} | 鄰居:{round(s_neighbor,2)} | 趨勢原值={raw_interval_val} | 趨勢得分={round(s_trend,2)} | 微擾:{round(s_bias,4)}")
-			
+            
         analysis_data.append({
             "號碼": num_str,
             "總得分": round(total_score, 4), 
@@ -769,7 +769,7 @@ def run_backtest_rank_11_13(df, base_weights, use_ai, start_r=11, end_r=13):
         # 2. ⚡ 關鍵同步：取得當時的區間熱力數據
         # 呼叫外部統一的 get_interval_stats 函式，傳入模擬的歷史視窗
         # 這裡會得到一個「字典」格式的 20 期平均熱度，與 Tab 1 即時顯示完全一致
-		# 這樣可以確保傳進去的就是從基準期開始算的 20 期
+        # 這樣可以確保傳進去的就是從基準期開始算的 20 期
         temp_interval_stats = get_interval_stats(history_df.head(20))
 
         # 3. 🔍 執行核心排名計算
@@ -1278,7 +1278,7 @@ with tab3:
             score_df = pd.DataFrame(list(all_scores.items()), columns=['號碼', '加權總分'])
             score_df = score_df.sort_values(by='加權總分', ascending=False).head(10).reset_index(drop=True)
             st.dataframe(score_df.style.highlight_max(axis=0, color='#ff4b4b'), use_container_width=True)
-			
+            
 
         # --- 系統控制 ---
         with st.expander("⚙️ 系統控制與追蹤"):
@@ -1312,46 +1312,8 @@ with tab3:
     st.caption("註：預測邏輯基於歷史統計數據，僅供參考。請理性娛樂。")
 
 st.info("💡 提示：手機開啟時，將此網頁「新增至主螢幕」即可像 App 一樣使用。")
+    
 
-st.header("📊 雙軌數據分析中心")
-st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
-
-col1, col2 = st.columns([1, 1.8])
-
-with col1:
-    st.subheader("🎯 方案一：Smart Pick 3")
-    # 執行原本的選號邏輯
-    recs, _ = smart_pick_3(df, omissions, interval_stats, None, weights=sidebar_weights)
-    
-    st.markdown("---")
-    for r in recs:
-        st.markdown(f"### 📍 推薦號碼：`{r}`")
-    st.markdown("---")
-    st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
-
-with col2:
-    st.subheader("📈 方案二：全號碼競爭力排行榜")
-    # 🚀 關鍵修正：在執行排名前，先算出最新的 20 期趨勢字典
-    # 確保傳入 get_global_ranking 的 interval_stats 是有數值的
-    current_interval_stats = get_interval_stats(df.head(20)) 
-    
-    # 執行強化版全域排名 
-    rank_df = get_global_ranking(df, omissions, current_interval_stats, sidebar_weights)
-    
-    # 快速摘要
-    top_5 = rank_df.head(5)["號碼"].tolist()
-    bottom_5 = rank_df.tail(5)["號碼"].tolist()
-    
-    c1, c2 = st.columns(2)
-    c1.success(f"🔝 潛力前五：{', '.join(top_5)}")
-    c2.error(f"🗑️ 建議避雷：{', '.join(bottom_5)}")
-    
-    # 顯示完整資料表
-    st.dataframe(
-        rank_df.style.background_gradient(subset=['總得分'], cmap='YlOrRd'),
-        use_container_width=True,
-        height=450
-    )
 
 with tab4: # 第四個 Tab
     st.header("📊 策略勝率回測 (過去 50 期)")
@@ -1373,167 +1335,205 @@ with tab4: # 第四個 Tab
     }
 
     if st.button("🚀 開始執行 50 期回測"):
-	    with st.spinner("系統正在模擬歷史選號並驗證結果..."):
-	        # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
-	        backtest_df = run_backtest(df, sidebar_weights, use_ai_calibration)
-	    
-	    # --- 1. 錯誤檢查機制 ---
-	    if backtest_df is None or backtest_df.empty:
-	        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整（建議至少需 100 期歷史數據）。")
-	    else:
-	        # --- 2. 符合新統計定義的數據處理 ---
-	        total_tests = len(backtest_df)
-	        success_3 = backtest_df["三星成功"].sum()
-	        success_2 = backtest_df["二星命中"].sum()
-	        success_1 = backtest_df["一星命中"].sum()
-	        
-	        # 計算勝率
-	        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
-	        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
-	        
-	        # --- 3. 顯示儀表板 (含基準權重標註) ---
-	        st.subheader("🏁 三星命中率回測總結")
-	        
-	        # 修正後的基準權重顯示 (建議緊跟在標題後)
-	        st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 回流 **{sidebar_weights['flow']}** | 遺漏 **{sidebar_weights['omit']}**")
-	
-	        c1, c2, c3, c4 = st.columns(4)
-	        c1.metric("回測總期數", f"{total_tests} 期")
-	        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
-	        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
-	        c4.metric("一星命中", f"{success_1} 次")
-	
-	        # --- 4. 顯示詳細回測清單 ---
-	        st.write("### 📝 詳細模擬紀錄與命中詳情")
-	        
-	        def highlight_hits(row):
-	            val = row['最高單期命中']
-	            if val == 3: 
-	                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
-	            elif val == 2: 
-	                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
-	            elif val == 1: 
-	                return ['background-color: #fff3cd; color: black'] * len(row)
-	            return [''] * len(row)
-	
-	        st.dataframe(
-	            backtest_df.style.apply(highlight_hits, axis=1),
-	            use_container_width=True,
-	            height=500
-	        )
-	
-	        # --- 5. 檔案下載功能 ---
-	        st.write("---")
-	        import datetime
-	        current_time = datetime.datetime.now().strftime("%m%d_%H%M")
-	        
-	        try:
-	            start_id = backtest_df["期數"].iloc[0]
-	        except:
-	            start_id = "report"
-	
-	        file_output_name = f"bingo_backtest_{start_id}_{current_time}.csv"
-	        csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
-	        
-	        st.download_button(
-	            label=f"📥 下載報表 ({current_time})",
-	            data=csv_data,
-	            file_name=file_output_name,
-	            mime="text/csv",
-	            help=f"點擊下載回測詳細紀錄。檔名：{file_output_name}",
-	            use_container_width=True
-	        )
-	        
-	        # --- 6. 權重優化建議 ---
-	        st.divider()
-	        with st.expander("💡 如何解讀這份報告並優化權重？"):
-	            st.markdown(f"""
-	            - **當前三星率：{win_rate_3:.1f}%**
-	            - **當前二星率：{win_rate_2:.1f}%**
-	            
-	            **優化策略：**
-	            1. **如果二星很多但三星為 0**：代表號碼抓對了但分散在不同期，建議調高「短期連動」權重。
-	            2. **如果連一星都很少**：代表策略偏離，建議執行「智慧校準」。
-	            3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
-	            """)
-                
-# --- 1. 先定義變數 (確保按鈕執行前變數已存在) ---
-col_s, col_e = st.columns(2)
-with col_s:
-    # 這裡定義 start_r，預設值設為 11
-    start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
-with col_e:
-    # 這裡定義 end_r，預設值設為 13
-    end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
-
-# 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
-if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
-    with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
-        # 執行回測：傳入自定義的 start_r 與 end_r
-        backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
+        with st.spinner("系統正在模擬歷史選號並驗證結果..."):
+            # 執行回測：確保傳入 sidebar_weights (目前側邊欄的數值)
+            backtest_df = run_backtest(df, sidebar_weights, use_ai_calibration)
+        
+        # --- 1. 錯誤檢查機制 ---
+        if backtest_df is None or backtest_df.empty:
+            st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整（建議至少需 100 期歷史數據）。")
+        else:
+            # --- 2. 符合新統計定義的數據處理 ---
+            total_tests = len(backtest_df)
+            success_3 = backtest_df["三星成功"].sum()
+            success_2 = backtest_df["二星命中"].sum()
+            success_1 = backtest_df["一星命中"].sum()
+            
+            # 計算勝率
+            win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+            win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+            
+            # --- 3. 顯示儀表板 (含基準權重標註) ---
+            st.subheader("🏁 三星命中率回測總結")
+            
+            # 修正後的基準權重顯示 (建議緊跟在標題後)
+            st.caption(f"📊 本次報告基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 回流 **{sidebar_weights['flow']}** | 遺漏 **{sidebar_weights['omit']}**")
     
-    if backtest_df is None or backtest_df.empty:
-        st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
-    else:
-        # --- 數據處理 ---
-        total_tests = len(backtest_df)
-        success_3 = backtest_df["三星成功"].sum()
-        success_2 = backtest_df["二星命中"].sum()
-        success_1 = backtest_df["一星命中"].sum()
-        
-        win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
-        win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
-        
-        # --- 顯示儀表板 ---
-        st.subheader(f"🏁 排名 {start_r}-{end_r} 策略回測總結")
-        st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("回測總期數", f"{total_tests} 期")
+            c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+            c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+            c4.metric("一星命中", f"{success_1} 次")
+    
+            # --- 4. 顯示詳細回測清單 ---
+            st.write("### 📝 詳細模擬紀錄與命中詳情")
+            
+            def highlight_hits(row):
+                val = row['最高單期命中']
+                if val == 3: 
+                    return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+                elif val == 2: 
+                    return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+                elif val == 1: 
+                    return ['background-color: #fff3cd; color: black'] * len(row)
+                return [''] * len(row)
+    
+            st.dataframe(
+                backtest_df.style.apply(highlight_hits, axis=1),
+                use_container_width=True,
+                height=500
+            )
+    
+            # --- 5. 檔案下載功能 ---
+            st.write("---")
+            import datetime
+            current_time = datetime.datetime.now().strftime("%m%d_%H%M")
+            
+            try:
+                start_id = backtest_df["期數"].iloc[0]
+            except:
+                start_id = "report"
+    
+            file_output_name = f"bingo_backtest_{start_id}_{current_time}.csv"
+            csv_data = backtest_df.to_csv(index=False).encode('utf-8-sig')
+            
+            st.download_button(
+                label=f"📥 下載報表 ({current_time})",
+                data=csv_data,
+                file_name=file_output_name,
+                mime="text/csv",
+                help=f"點擊下載回測詳細紀錄。檔名：{file_output_name}",
+                use_container_width=True
+            )
+            
+            # --- 6. 權重優化建議 ---
+            st.divider()
+            with st.expander("💡 如何解讀這份報告並優化權重？"):
+                st.markdown(f"""
+                - **當前三星率：{win_rate_3:.1f}%**
+                - **當前二星率：{win_rate_2:.1f}%**
+                
+                **優化策略：**
+                1. **如果二星很多但三星為 0**：代表號碼抓對了但分散在不同期，建議調高「短期連動」權重。
+                2. **如果連一星都很少**：代表策略偏離，建議執行「智慧校準」。
+                3. **命中號碼檢查**：觀察中獎號碼是否符合預期邏輯。
+                """)
+    st.header("📊 雙軌數據分析中心")
+    st.info("左側為精準組合預測，右側為 80 顆球全域熱度排行，方便你執行『逆向排除』或『手動加選』。")
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("回測總期數", f"{total_tests} 期")
-        c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
-        c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
-        c4.metric("一星命中", f"{success_1} 次")
+    col1, col2 = st.columns([1, 1.8])
 
-        # --- 詳細清單與染色 ---
-        st.write(f"### 📝 詳細模擬紀錄 ({start_r}-{end_r} 名策略)")
+    with col1:
+        st.subheader("🎯 方案一：Smart Pick 3")
+        # 執行原本的選號邏輯
+        recs, _ = smart_pick_3(df, omissions, interval_stats, None, weights=sidebar_weights)
         
-        # 定義專用的染色函式（維持原狀，使用 '最高單期命中'）
-        def highlight_rank_hits(row):
-            val = row['最高單期命中']
-            if val == 3: 
-                return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
-            elif val == 2: 
-                return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
-            elif val == 1: 
-                return ['background-color: #fff3cd; color: black'] * len(row)
-            return [''] * len(row)
+        st.markdown("---")
+        for r in recs:
+            st.markdown(f"### 📍 推薦號碼：`{r}`")
+        st.markdown("---")
+        st.caption("💡 這是基於當前權重算出的最高分三位一體組合。")
 
+    with col2:
+        st.subheader("📈 方案二：全號碼競爭力排行榜")
+        # 🚀 關鍵修正：在執行排名前，先算出最新的 20 期趨勢字典
+        # 確保傳入 get_global_ranking 的 interval_stats 是有數值的
+        current_interval_stats = get_interval_stats(df.head(20)) 
+        
+        # 執行強化版全域排名 
+        rank_df = get_global_ranking(df, omissions, current_interval_stats, sidebar_weights)
+        
+        # 快速摘要
+        top_5 = rank_df.head(5)["號碼"].tolist()
+        bottom_5 = rank_df.tail(5)["號碼"].tolist()
+        
+        c1, c2 = st.columns(2)
+        c1.success(f"🔝 潛力前五：{', '.join(top_5)}")
+        c2.error(f"🗑️ 建議避雷：{', '.join(bottom_5)}")
+        
+        # 顯示完整資料表
         st.dataframe(
-            backtest_df.style.apply(highlight_rank_hits, axis=1),
+            rank_df.style.background_gradient(subset=['總得分'], cmap='YlOrRd'),
             use_container_width=True,
-            height=500
+            height=450
         )
-
-	
-
-
-	
-st.divider()
-st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
-
-if st.button("📈 啟動 3-63名 全頻勝率掃描"):
-    with st.spinner("深度回測中... 這可能需要 20 秒"):
-        final_df = analyze_full_spectrum(df, sidebar_weights)
         
-        # 1. 顯示排行榜
-        st.write("### 🏆 3-63名 各組歷史得分榜")
-        st.dataframe(final_df, use_container_width=True)
-        
-        # 2. 顯示走勢圖
-        st.write("### 📈 排名與勝率走勢圖")
-        chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
-        st.line_chart(chart_df)
+    # --- 1. 先定義變數 (確保按鈕執行前變數已存在) ---
+    col_s, col_e = st.columns(2)
+    with col_s:
+        # 這裡定義 start_r，預設值設為 11
+        start_r = st.number_input("排名起點", min_value=1, max_value=80, value=11, step=1)
+    with col_e:
+        # 這裡定義 end_r，預設值設為 13
+        end_r = st.number_input("排名終點", min_value=1, max_value=80, value=13, step=1)
 
+    # 在此之前應先定義好 start_r 與 end_r (例如透過 st.number_input)
+    if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
+        with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
+            # 執行回測：傳入自定義的 start_r 與 end_r
+            backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
+        
+        if backtest_df is None or backtest_df.empty:
+            st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
+        else:
+            # --- 數據處理 ---
+            total_tests = len(backtest_df)
+            success_3 = backtest_df["三星成功"].sum()
+            success_2 = backtest_df["二星命中"].sum()
+            success_1 = backtest_df["一星命中"].sum()
+            
+            win_rate_3 = (success_3 / total_tests * 100) if total_tests > 0 else 0
+            win_rate_2 = (success_2 / total_tests * 100) if total_tests > 0 else 0
+            
+            # --- 顯示儀表板 ---
+            st.subheader(f"🏁 排名 {start_r}-{end_r} 策略回測總結")
+            st.caption(f"📊 基準權重：鄰居 **{sidebar_weights['neighbor']}** | 連動 **{sidebar_weights['trend']}** | 遺漏 **{sidebar_weights['omit']}**")
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("回測總期數", f"{total_tests} 期")
+            c2.metric("三星成功", f"{success_3} 次", f"{win_rate_3:.1f}%")
+            c3.metric("二星命中", f"{success_2} 次", f"{win_rate_2:.1f}%")
+            c4.metric("一星命中", f"{success_1} 次")
+
+            # --- 詳細清單與染色 ---
+            st.write(f"### 📝 詳細模擬紀錄 ({start_r}-{end_r} 名策略)")
+            
+            # 定義專用的染色函式（維持原狀，使用 '最高單期命中'）
+            def highlight_rank_hits(row):
+                val = row['最高單期命中']
+                if val == 3: 
+                    return ['background-color: #ff4b4b; color: white; font-weight: bold'] * len(row)
+                elif val == 2: 
+                    return ['background-color: #ffaa00; color: black; font-weight: bold'] * len(row)
+                elif val == 1: 
+                    return ['background-color: #fff3cd; color: black'] * len(row)
+                return [''] * len(row)
+
+            st.dataframe(
+                backtest_df.style.apply(highlight_rank_hits, axis=1),
+                use_container_width=True,
+                height=500
+            )
+
+        
+
+
+        
+    st.divider()
+    st.subheader("🎯 歷史最優組別偵測 (近50期嚴謹回測)")
+
+    if st.button("📈 啟動 3-63名 全頻勝率掃描"):
+        with st.spinner("深度回測中... 這可能需要 20 秒"):
+            final_df = analyze_full_spectrum(df, sidebar_weights)
+            
+            # 1. 顯示排行榜
+            st.write("### 🏆 3-63名 各組歷史得分榜")
+            st.dataframe(final_df, use_container_width=True)
+            
+            # 2. 顯示走勢圖
+            st.write("### 📈 排名與勝率走勢圖")
+            chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
+            st.line_chart(chart_df)
 
 
 
