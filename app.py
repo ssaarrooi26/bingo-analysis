@@ -1415,7 +1415,7 @@ with tab4: # 第四個 Tab
         with st.spinner("深度回測中... 這可能需要 20 秒"):
             # 💡 執行運算並直接存入 session_state
             st.session_state.spectrum_result = analyze_full_spectrum(df, sidebar_weights)
-            st.rerun() # 強制重整以顯示結果
+            
     if st.session_state.spectrum_result is not None:        
         final_df = analyze_full_spectrum(df, sidebar_weights)
             
