@@ -1349,10 +1349,16 @@ with tab4: # 第四個 Tab
     if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
         with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
             # 執行回測：傳入自定義的 start_r 與 end_r
-            st.session_state.backtest_result = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
-        
-    if st.session_state.backtest_result is None:
+            result_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
             
+            if result_df is not None:
+                st.session_state.backtest_result = result_df
+                st.rerun()  # 💡 強制重整，確保資料被顯示出來
+            else:
+                st.error("回測執行失敗，請檢查函式邏輯。")
+        
+        
+    if st.session_state.backtest_result is None:     
         if st.session_state.backtest_result.empty:
             st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
         else:
