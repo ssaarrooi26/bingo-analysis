@@ -1352,9 +1352,8 @@ with tab4: # 第四個 Tab
             st.session_state.backtest_result = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
         
     if st.session_state.backtest_result is None:
-            # 如果還沒執行過，可以顯示提示或什麼都不做
-            pass
-        elif st.session_state.backtest_result.empty:
+            
+        if st.session_state.backtest_result.empty:
             st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
         else:
             # 💡 為了方便後續計算，我們建立一個臨時變數 backtest_df 指向保險箱裡的內容
