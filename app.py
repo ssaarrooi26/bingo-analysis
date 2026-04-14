@@ -1075,8 +1075,9 @@ interval_stats = df_ascending.groupby('Group')[existing_cols].apply(lambda x: x.
     
 # 4. 重新定義索引名稱 (例如：第 1~5 筆)
 interval_stats.index = [
-f"第 {int((i-1)*group_size + 1)}~{int(i*group_size)} 筆" 
-for i in interval_stats.index
+    f"第 {int((i-1)*group_size + 1)}~{int(i*group_size)} 筆" 
+    for i in interval_stats.index
+]
     
 # 3. 功能分頁
 tab3, tab4 = st.tabs(["🔮 智能建議", "策略回測"])
