@@ -1358,7 +1358,7 @@ with tab4: # 第四個 Tab
                 st.error("回測執行失敗，請檢查函式邏輯。")
         
         
-    if st.session_state.backtest_result is None:     
+    if st.session_state.backtest_result is not None:     
         if st.session_state.backtest_result.empty:
             st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
         else:
