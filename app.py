@@ -1064,52 +1064,26 @@ if rec:
     if not rec['tips']:
         st.sidebar.caption("⚖️ 當前盤勢穩定，符合長期統計規律。")
 
+# 1. 為了讓「最小期數」是第一筆，我們先建立一個正序的副本 (舊 -> 新)
+df_ascending = df.iloc[::-1].copy().reset_index(drop=True)
+    
+# 2. 分組計算：現在 index 0 是最舊的資料
+df_ascending['Group'] = (df_ascending.index // group_size) + 1
+    
+# 3. 計算每個區間的出現次數
+interval_stats = df_ascending.groupby('Group')[existing_cols].apply(lambda x: x.notnull().sum())
+    
+# 4. 重新定義索引名稱 (例如：第 1~5 筆)
+interval_stats.index = [
+f"第 {int((i-1)*group_size + 1)}~{int(i*group_size)} 筆" 
+for i in interval_stats.index
     
 # 3. 功能分頁
-tab2, tab3, tab4 = st.tabs(["分段趨勢表", "🔮 智能建議", "策略回測"])
+tab3, tab4 = st.tabs(["🔮 智能建議", "策略回測"])
 
 
 
-with tab2:
-    st.header(f"每 {group_size} 期趨勢分析")
-    # 1. 為了讓「最小期數」是第一筆，我們先建立一個正序的副本 (舊 -> 新)
-    df_ascending = df.iloc[::-1].copy().reset_index(drop=True)
-    
-    # 2. 分組計算：現在 index 0 是最舊的資料
-    df_ascending['Group'] = (df_ascending.index // group_size) + 1
-    
-    # 3. 計算每個區間的出現次數
-    interval_stats = df_ascending.groupby('Group')[existing_cols].apply(lambda x: x.notnull().sum())
-    
-    # 4. 重新定義索引名稱 (例如：第 1~5 筆)
-    interval_stats.index = [
-        f"第 {int((i-1)*group_size + 1)}~{int(i*group_size)} 筆" 
-        for i in interval_stats.index
-    ]
-    
-    # 2. 獲取數據的最大值，用來計算顏色比例
-    max_val = interval_stats.max().max()
-    if max_val <= 1: max_val = 2 # 防止除以零
 
-    # 3. 自定義非線性色階
-    # 我們設定：0 是紅色，1/max_val 的位置是白色，1 是綠色
-    # 這樣 0->1 是紅變白，1->最大值 是白變綠
-    nodes = [0.0, 1.0/max_val, 1.0]
-    colors = ["#FF3333", "#FFFFFF", "#008000"] # 紅、白、深綠
-    special_cmap = mcolors.LinearSegmentedColormap.from_list("special_rng", list(zip(nodes, colors)))
-    
-    # 4. 設定色階 
-    # axis=None 代表對整個表格進行全域比較，而不僅是單行或單列比較
-    # 這樣「全表」出現 3 次的格子顏色都會一模一樣
-    styled_df = interval_stats.style.background_gradient(
-        cmap=special_cmap, 
-        axis=None,    # 關鍵：全域比較，相同數值必同色
-        low=0,        # 設定顏色範圍的最小值
-        high=0.5      # 稍微調高上限，可以讓顏色對比更明顯（可視情況調整）
-    ).format("{:.0f}") # 確保顯示的是整數
-    
-    # 3. 顯示表格
-    st.dataframe(styled_df, height=600)
 
 with tab3:
     st.header("🔮 智能選號建議")
