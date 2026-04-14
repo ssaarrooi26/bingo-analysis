@@ -1351,7 +1351,7 @@ with tab4: # 第四個 Tab
             # 執行回測：傳入自定義的 start_r 與 end_r
             st.session_state.backtest_result = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
         
-        if st.session_state.backtest_result is None:
+    if st.session_state.backtest_result is None:
             # 如果還沒執行過，可以顯示提示或什麼都不做
             pass
         elif st.session_state.backtest_result.empty:
