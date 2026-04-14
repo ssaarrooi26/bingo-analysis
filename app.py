@@ -1413,16 +1413,20 @@ with tab4: # 第四個 Tab
 
     if st.button("📈 啟動 3-63名 全頻勝率掃描"):
         with st.spinner("深度回測中... 這可能需要 20 秒"):
-            final_df = analyze_full_spectrum(df, sidebar_weights)
+            # 💡 執行運算並直接存入 session_state
+            st.session_state.spectrum_result = analyze_full_spectrum(df, sidebar_weights)
+            st.rerun() # 強制重整以顯示結果
+    if st.session_state.spectrum_result is not None:        
+        final_df = analyze_full_spectrum(df, sidebar_weights)
             
-            # 1. 顯示排行榜
-            st.write("### 🏆 3-63名 各組歷史得分榜")
-            st.dataframe(final_df, use_container_width=True)
+        # 1. 顯示排行榜
+        st.write("### 🏆 3-63名 各組歷史得分榜")
+        st.dataframe(final_df, use_container_width=True)
             
-            # 2. 顯示走勢圖
-            st.write("### 📈 排名與勝率走勢圖")
-            chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
-            st.line_chart(chart_df)
+        # 2. 顯示走勢圖
+        st.write("### 📈 排名與勝率走勢圖")
+        chart_df = final_df.sort_values("start_val").set_index("名次區間")["綜合評分"]
+        st.line_chart(chart_df)
 
 
 
