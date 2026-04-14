@@ -12,7 +12,11 @@ import gspread
 from google.oauth2.service_account import Credentials
 import itertools
 
-
+# 檢查保險箱裡有沒有這兩個變數，沒有的話就先建立空的
+if "backtest_result" not in st.session_state:
+    st.session_state.backtest_result = None
+if "spectrum_result" not in st.session_state:
+    st.session_state.spectrum_result = None
 
 # 爬蟲測試函數
 def fetch_full_table_from_web():
@@ -1370,11 +1374,17 @@ with tab4: # 第四個 Tab
     if st.button(f"🚀 執行排名 {start_r}-{end_r} 回測"):
         with st.spinner(f"正在模擬「排名 {start_r}-{end_r}」策略回測..."):
             # 執行回測：傳入自定義的 start_r 與 end_r
-            backtest_df = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
+            st.session_state.backtest_result = run_backtest_rank_11_13(df, sidebar_weights, use_ai_calibration, start_r=start_r, end_r=end_r)
         
-        if backtest_df is None or backtest_df.empty:
+        if st.session_state.backtest_result is None:
+            # 如果還沒執行過，可以顯示提示或什麼都不做
+            pass
+        elif st.session_state.backtest_result.empty:
             st.warning("⚠️ 回測未產生任何結果，請確認數據源是否完整。")
         else:
+            # 💡 為了方便後續計算，我們建立一個臨時變數 backtest_df 指向保險箱裡的內容
+            backtest_df = st.session_state.backtest_result
+            
             # --- 數據處理 ---
             total_tests = len(backtest_df)
             success_3 = backtest_df["三星成功"].sum()
